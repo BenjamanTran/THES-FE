@@ -1,56 +1,49 @@
 "use client"
 
 import { useState } from "react"
-import { Filter, List, MapPin, Snowflake, Car, ShowerHead, Store, X } from "lucide-react"
+import { Filter, List, MapPin, X } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Card } from "@/components/ui/card"
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Switch } from "@/components/ui/switch"
 import { Label } from "@/components/ui/label"
-import { SkillBadge } from "./skill-badge"
+import { Mapbox3DMap } from "./mapbox-3d-map"
+import { fetchGames, type Game } from "@/lib/api"
+import { format } from "date-fns"
+import { useEffect } from "react"
 
-interface MapMarker {
-  id: number
-  type: "match" | "venue"
-  name: string
-  lat: number
-  lng: number
-  players?: number
-  maxPlayers?: number
-  level?: string
-  time?: string
-  courts?: number
-  rating?: number
-}
-
-const markers: MapMarker[] = [
-  { id: 1, type: "match", name: "Trận đấu tại Phú Thọ", lat: 10.77, lng: 106.66, players: 6, maxPlayers: 8, level: "Khá", time: "18:00" },
-  { id: 2, type: "match", name: "Friendly Match", lat: 10.78, lng: 106.68, players: 4, maxPlayers: 6, level: "Trung bình +", time: "19:30" },
-  { id: 3, type: "venue", name: "Galaxy Badminton", lat: 10.76, lng: 106.67, courts: 8, rating: 4.8 },
-  { id: 4, type: "venue", name: "Victory Sports", lat: 10.79, lng: 106.65, courts: 12, rating: 4.6 },
-  { id: 5, type: "match", name: "Pro Training", lat: 10.75, lng: 106.69, players: 2, maxPlayers: 4, level: "Bán chuyên", time: "20:00" },
-]
-
-const filterOptions = {
-  environment: ["Indoor", "Outdoor"],
-  surface: ["Gỗ", "Cao su", "Synthetic"],
-  amenities: [
-    { id: "ac", label: "Điều hòa", icon: Snowflake },
-    { id: "parking", label: "Bãi đỗ xe", icon: Car },
-    { id: "shower", label: "Phòng tắm", icon: ShowerHead },
-    { id: "shop", label: "Pro Shop", icon: Store },
-  ],
-}
+const skillLevels = ["Newbie", "Yếu +", "Trung bình yếu", "Trung bình trừ", "Trung bình", "Trung bình khá", "Bán chuyên", "Chuyên nghiệp"];
+const priceRanges = [
+  { id: "budget", label: "< 50K" },
+  { id: "mid", label: "50K - 100K" },
+  { id: "premium", label: "100K - 200K" },
+  { id: "luxury", label: "> 200K" },
+];
+const hcmDistricts = [
+  "Quận 1", "Quận 2", "Quận 3", "Quận 4", "Quận 5", "Quận 6", "Quận 7",
+  "Quận 8", "Quận 9", "Quận 10", "Quận 11", "Quận 12",
+  "Quận Tân Bình", "Quận Tân Phú", "Quận Phú Nhuận", "Quận Bình Thạnh",
+  "Quận Gò Vấp", "Quận Thủ Đức"
+];
 
 export function MapScreen() {
+  const [games, setGames] = useState<Game[]>([])
+  const [loading, setLoading] = useState(false)
   const [viewMode, setViewMode] = useState<"map" | "list">("map")
-  const [selectedMarker, setSelectedMarker] = useState<MapMarker | null>(null)
+
+  useEffect(() => {
+    if (viewMode !== "list") return
+    setLoading(true)
+    fetchGames({ status: "open", per_page: "20" })
+      .then((res) => setGames(res.games))
+      .catch(() => {})
+      .finally(() => setLoading(false))
+  }, [viewMode])
   const [filters, setFilters] = useState({
-    environment: [] as string[],
-    surface: [] as string[],
-    amenities: [] as string[],
+    skillLevels: [] as string[],
+    priceRanges: [] as string[],
+    districts: [] as string[],
   })
 
   const toggleFilter = (category: keyof typeof filters, value: string) => {
@@ -102,60 +95,55 @@ export function MapScreen() {
                   <SheetTitle className="text-left">Bộ lọc</SheetTitle>
                 </SheetHeader>
                 
-                <div className="space-y-6 pb-8">
-                  {/* Environment */}
+                <div className="space-y-6 pb-8 max-h-[70vh] overflow-y-auto">
+                  {/* Skill Level */}
                   <div>
-                    <Label className="text-sm font-semibold mb-3 block">Môi trường</Label>
-                    <div className="flex gap-2">
-                      {filterOptions.environment.map((env) => (
-                        <Badge
-                          key={env}
-                          variant={filters.environment.includes(env) ? "default" : "outline"}
-                          className="cursor-pointer px-4 py-2 rounded-full"
-                          onClick={() => toggleFilter("environment", env)}
-                        >
-                          {env}
-                        </Badge>
-                      ))}
-                    </div>
-                  </div>
-
-                  {/* Surface */}
-                  <div>
-                    <Label className="text-sm font-semibold mb-3 block">Mặt sân</Label>
+                    <Label className="text-sm font-semibold mb-3 block">Trình độ</Label>
                     <div className="flex gap-2 flex-wrap">
-                      {filterOptions.surface.map((surface) => (
+                      {skillLevels.map((level) => (
                         <Badge
-                          key={surface}
-                          variant={filters.surface.includes(surface) ? "default" : "outline"}
-                          className="cursor-pointer px-4 py-2 rounded-full"
-                          onClick={() => toggleFilter("surface", surface)}
+                          key={level}
+                          variant={filters.skillLevels.includes(level) ? "default" : "outline"}
+                          className="cursor-pointer px-3 py-2 rounded-full text-xs"
+                          onClick={() => toggleFilter("skillLevels", level)}
                         >
-                          {surface}
+                          {level}
                         </Badge>
                       ))}
                     </div>
                   </div>
 
-                  {/* Amenities */}
+                  {/* Price Range */}
                   <div>
-                    <Label className="text-sm font-semibold mb-3 block">Tiện ích</Label>
-                    <div className="space-y-3">
-                      {filterOptions.amenities.map((amenity) => {
-                        const Icon = amenity.icon
-                        return (
-                          <div key={amenity.id} className="flex items-center justify-between">
-                            <div className="flex items-center gap-3">
-                              <Icon className="w-4 h-4 text-muted-foreground" />
-                              <span className="text-sm">{amenity.label}</span>
-                            </div>
-                            <Switch
-                              checked={filters.amenities.includes(amenity.id)}
-                              onCheckedChange={() => toggleFilter("amenities", amenity.id)}
-                            />
-                          </div>
-                        )
-                      })}
+                    <Label className="text-sm font-semibold mb-3 block">Giá tiền / 2 giờ</Label>
+                    <div className="flex gap-2 flex-wrap">
+                      {priceRanges.map((price) => (
+                        <Badge
+                          key={price.id}
+                          variant={filters.priceRanges.includes(price.id) ? "default" : "outline"}
+                          className="cursor-pointer px-3 py-2 rounded-full text-xs"
+                          onClick={() => toggleFilter("priceRanges", price.id)}
+                        >
+                          {price.label}
+                        </Badge>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* HCMC Districts */}
+                  <div>
+                    <Label className="text-sm font-semibold mb-3 block">Quận / Huyện TP HCM</Label>
+                    <div className="flex gap-2 flex-wrap">
+                      {hcmDistricts.map((district) => (
+                        <Badge
+                          key={district}
+                          variant={filters.districts.includes(district) ? "default" : "outline"}
+                          className="cursor-pointer px-3 py-1 rounded-full text-xs"
+                          onClick={() => toggleFilter("districts", district)}
+                        >
+                          {district}
+                        </Badge>
+                      ))}
                     </div>
                   </div>
 
@@ -171,7 +159,7 @@ export function MapScreen() {
         {/* Active Filters */}
         {activeFilterCount > 0 && (
           <div className="flex gap-2 mt-3 overflow-x-auto pb-1">
-            {[...filters.environment, ...filters.surface, ...filters.amenities].map((filter) => (
+            {[...filters.skillLevels, ...filters.priceRanges, ...filters.districts].map((filter) => (
               <Badge
                 key={filter}
                 variant="secondary"
@@ -179,9 +167,9 @@ export function MapScreen() {
               >
                 {filter}
                 <X className="w-3 h-3 cursor-pointer" onClick={() => {
-                  if (filters.environment.includes(filter)) toggleFilter("environment", filter)
-                  else if (filters.surface.includes(filter)) toggleFilter("surface", filter)
-                  else toggleFilter("amenities", filter)
+                  if (filters.skillLevels.includes(filter)) toggleFilter("skillLevels", filter)
+                  else if (filters.priceRanges.includes(filter)) toggleFilter("priceRanges", filter)
+                  else toggleFilter("districts", filter)
                 }} />
               </Badge>
             ))}
@@ -191,151 +179,48 @@ export function MapScreen() {
 
       {/* Map View */}
       {viewMode === "map" ? (
-        <div className="flex-1 relative bg-accent/50">
-          {/* Simulated Map Background */}
-          <div className="absolute inset-0 bg-gradient-to-b from-accent/30 to-accent/50">
-            {/* Grid pattern to simulate map */}
-            <div className="absolute inset-0 opacity-10" style={{
-              backgroundImage: `
-                linear-gradient(to right, currentColor 1px, transparent 1px),
-                linear-gradient(to bottom, currentColor 1px, transparent 1px)
-              `,
-              backgroundSize: '40px 40px',
-            }} />
-          </div>
-
-          {/* Map Markers */}
-          <div className="absolute inset-0 p-8">
-            {markers.map((marker, index) => (
-              <button
-                key={marker.id}
-                className={`absolute transform -translate-x-1/2 -translate-y-1/2 transition-all duration-200 ${
-                  selectedMarker?.id === marker.id ? "scale-125 z-20" : "z-10 hover:scale-110"
-                }`}
-                style={{
-                  left: `${20 + (index * 15) % 60}%`,
-                  top: `${15 + (index * 20) % 50}%`,
-                }}
-                onClick={() => setSelectedMarker(marker)}
-              >
-                {marker.type === "match" ? (
-                  <div className="relative">
-                    <div className={`w-12 h-12 rounded-full flex items-center justify-center shadow-lg ${
-                      selectedMarker?.id === marker.id 
-                        ? "bg-primary text-primary-foreground" 
-                        : "bg-card text-foreground border-2 border-primary"
-                    }`}>
-                      <span className="text-lg">🏸</span>
-                    </div>
-                    <div className="absolute -bottom-1 -right-1 w-5 h-5 bg-emerald-500 rounded-full flex items-center justify-center text-[10px] font-bold text-white">
-                      {marker.players}
-                    </div>
-                  </div>
-                ) : (
-                  <div className={`w-10 h-10 rounded-xl flex items-center justify-center shadow-lg ${
-                    selectedMarker?.id === marker.id 
-                      ? "bg-primary text-primary-foreground" 
-                      : "bg-card text-foreground border border-border"
-                  }`}>
-                    <MapPin className="w-5 h-5" />
-                  </div>
-                )}
-              </button>
-            ))}
-          </div>
-
-          {/* Selected Marker Info */}
-          {selectedMarker && (
-            <div className="absolute bottom-4 left-4 right-4 z-30">
-              <Card className="p-4 rounded-2xl border-primary/30 bg-card/95 backdrop-blur-sm">
-                <button 
-                  className="absolute top-2 right-2 p-1 rounded-full hover:bg-secondary"
-                  onClick={() => setSelectedMarker(null)}
-                >
-                  <X className="w-4 h-4" />
-                </button>
-                
-                {selectedMarker.type === "match" ? (
-                  <div>
-                    <div className="flex items-center gap-2 mb-2">
-                      <h3 className="font-semibold">{selectedMarker.name}</h3>
-                      <SkillBadge level={selectedMarker.level || "Khá"} size="xs" />
-                    </div>
-                    <p className="text-sm text-muted-foreground mb-3">
-                      {selectedMarker.time} • {selectedMarker.players}/{selectedMarker.maxPlayers} người chơi
-                    </p>
-                    <Button className="w-full rounded-full">Tham gia ngay</Button>
-                  </div>
-                ) : (
-                  <div>
-                    <h3 className="font-semibold mb-1">{selectedMarker.name}</h3>
-                    <div className="flex items-center gap-2 text-sm text-muted-foreground mb-3">
-                      <span>{selectedMarker.courts} sân</span>
-                      <span>•</span>
-                      <span className="flex items-center gap-1">
-                        <span className="text-yellow-500">★</span>
-                        {selectedMarker.rating}
-                      </span>
-                    </div>
-                    <Button className="w-full rounded-full">Đặt sân</Button>
-                  </div>
-                )}
-              </Card>
-            </div>
-          )}
-
-          {/* Recenter Button */}
-          <Button
-            variant="secondary"
-            size="icon"
-            className="absolute bottom-4 right-4 w-12 h-12 rounded-full shadow-lg z-20"
-          >
-            <MapPin className="w-5 h-5" />
-          </Button>
+        <div className="flex-1 relative bg-black">
+          <Mapbox3DMap />
         </div>
       ) : (
         /* List View */
         <div className="flex-1 overflow-y-auto px-4 py-4">
-          <div className="space-y-3">
-            {markers.map((marker) => (
-              <Card 
-                key={marker.id}
-                className="p-4 rounded-2xl border-border/50 hover:border-primary/30 transition-colors cursor-pointer"
-              >
-                {marker.type === "match" ? (
+          {loading ? (
+            <p className="text-center text-muted-foreground text-sm py-8">Đang tải...</p>
+          ) : games.length === 0 ? (
+            <p className="text-center text-muted-foreground text-sm py-8">Chưa có trận đấu nào</p>
+          ) : (
+            <div className="space-y-3">
+              {games.map((game) => (
+                <Card
+                  key={game.id}
+                  className="p-4 rounded-2xl border-border/50 hover:border-primary/30 transition-colors cursor-pointer"
+                >
                   <div className="flex items-center justify-between">
                     <div>
                       <div className="flex items-center gap-2 mb-1">
                         <span className="text-lg">🏸</span>
-                        <h3 className="font-semibold text-sm">{marker.name}</h3>
-                      </div>
-                      <p className="text-xs text-muted-foreground mb-2">{marker.time}</p>
-                      <SkillBadge level={marker.level || "Khá"} size="xs" />
-                    </div>
-                    <div className="text-right">
-                      <Badge variant="secondary" className="rounded-full mb-2">
-                        {marker.players}/{marker.maxPlayers}
-                      </Badge>
-                      <Button size="sm" className="rounded-full text-xs">Tham gia</Button>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <div className="flex items-center gap-2 mb-1">
-                        <MapPin className="w-4 h-4 text-primary" />
-                        <h3 className="font-semibold text-sm">{marker.name}</h3>
+                        <h3 className="font-semibold text-sm">
+                          {game.match_type === 'singles' ? 'Đơn' : 'Đôi'} • {game.location || 'Chưa rõ'}
+                        </h3>
                       </div>
                       <p className="text-xs text-muted-foreground">
-                        {marker.courts} sân • ★ {marker.rating}
+                        {format(new Date(game.start_time), 'HH:mm dd/MM')}
                       </p>
                     </div>
-                    <Button size="sm" variant="outline" className="rounded-full text-xs">Đặt sân</Button>
+                    <div className="text-right flex flex-col items-end gap-2">
+                      <Badge variant="secondary" className="rounded-full">
+                        {game.players_count}/{game.max_players}
+                      </Badge>
+                      {game.status === 'open' && (
+                        <Button size="sm" className="rounded-full text-xs">Tham gia</Button>
+                      )}
+                    </div>
                   </div>
-                )}
-              </Card>
-            ))}
-          </div>
+                </Card>
+              ))}
+            </div>
+          )}
         </div>
       )}
     </div>
