@@ -1,7 +1,7 @@
 "use client"
 
 import { useState } from "react"
-import { X, MapPin, Calendar, Clock, Users, Shuffle, ChevronRight, Check, Minus, Plus, Search } from "lucide-react"
+import { MapPin, Calendar, Clock, Users, Shuffle, ChevronRight, Check, Minus, Plus, Search } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
@@ -116,12 +116,7 @@ export function CreateMatchModal({ open, onOpenChange }: CreateMatchModalProps) 
       <DialogContent className="max-w-md mx-auto h-[85dvh] flex flex-col p-0 gap-0 rounded-t-3xl">
         {/* Header */}
         <DialogHeader className="px-4 pt-4 pb-3 border-b border-border/20 flex-shrink-0">
-          <div className="flex items-center justify-between">
-            <DialogTitle className="text-lg font-bold">Tạo trận đấu</DialogTitle>
-            <Button variant="ghost" size="icon" className="rounded-full" onClick={resetAndClose}>
-              <X className="w-5 h-5" />
-            </Button>
-          </div>
+          <DialogTitle className="text-lg font-bold">Tạo trận đấu</DialogTitle>
           
           {/* Progress Indicator */}
           <div className="flex items-center gap-2 mt-3">
