@@ -1,17 +1,28 @@
 "use client"
 
-import { Settings, ChevronRight, Trophy, Target, Flame, TrendingUp, Calendar, Clock, Award, Edit2 } from "lucide-react"
+import { useState } from "react"
+import { useRouter } from "next/navigation"
+import { Settings, ChevronRight, Trophy, Target, Flame, TrendingUp, Calendar, Clock, Edit2, LogOut, Loader2, LogIn, UserPlus, Phone, User as UserIcon, Award } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Badge } from "@/components/ui/badge"
 import { SkillBadge } from "./skill-badge"
-import { Progress } from "@/components/ui/progress"
+import { useAuth } from "@/lib/auth-context"
+import { EditProfileSheet } from "./edit-profile-sheet"
+import { MockSection } from "./mock-section"
+import type { Gender } from "@/lib/api"
 
-const userStats = {
-  name: "Tuấn Hưng",
+const GENDER_LABEL: Record<Gender, string> = {
+  unspecified: "Chưa cập nhật",
+  male: "Nam",
+  female: "Nữ",
+  other: "Khác",
+}
+
+const userStatsMock = {
   avatar: "/placeholder.svg?height=100&width=100",
-  level: "Khá",
+  level: "advanced",
   gr: 2480,
   grChange: "+45",
   rank: 247,
@@ -42,14 +53,99 @@ const achievements = [
   { id: 6, name: "Top 100", icon: "👑", unlocked: false },
 ]
 
+function avatarFallback(name: string | null | undefined): string {
+  if (!name) return "?"
+  const parts = name.trim().split(/\s+/)
+  const last = parts[parts.length - 1] || name
+  return last.charAt(0).toUpperCase()
+}
+
+function ProfileRow({
+  icon,
+  label,
+  value,
+  muted,
+}: {
+  icon: React.ReactNode
+  label: string
+  value: string
+  muted?: boolean
+}) {
+  return (
+    <li className="flex items-center gap-3 px-4 py-3">
+      <span className="w-8 h-8 rounded-full bg-secondary/60 text-muted-foreground flex items-center justify-center">
+        {icon}
+      </span>
+      <div className="flex-1 min-w-0">
+        <p className="text-[11px] text-muted-foreground">{label}</p>
+        <p className={"text-sm font-medium truncate " + (muted ? "text-muted-foreground" : "")}>
+          {value}
+        </p>
+      </div>
+    </li>
+  )
+}
+
 export function ProfileScreen() {
+  const router = useRouter()
+  const { user, logout } = useAuth()
+  const [loggingOut, setLoggingOut] = useState(false)
+  const [editOpen, setEditOpen] = useState(false)
+
+  const handleLogout = async () => {
+    setLoggingOut(true)
+    try {
+      await logout()
+    } finally {
+      setLoggingOut(false)
+    }
+  }
+
+  if (!user) {
+    return (
+      <div className="flex flex-col">
+        <header className="glass-dark sticky top-0 z-40 px-4 pt-4 pb-3 safe-top border-b border-border/20">
+          <h1 className="text-xl font-bold">Hồ sơ</h1>
+        </header>
+        <div className="flex-1 flex flex-col items-center justify-center px-6 py-16 text-center">
+          <div className="w-20 h-20 rounded-3xl bg-primary/15 flex items-center justify-center text-4xl mb-4">
+            🏸
+          </div>
+          <h2 className="text-lg font-bold mb-2">Chào mừng tới SmashHub</h2>
+          <p className="text-sm text-muted-foreground mb-8 max-w-xs">
+            Đăng nhập để tạo trận, tham gia trận khác và theo dõi lịch sử của bạn.
+          </p>
+          <div className="w-full max-w-xs space-y-3">
+            <Button className="w-full rounded-full" onClick={() => router.push("/login")}>
+              <LogIn className="w-4 h-4 mr-2" />
+              Đăng nhập
+            </Button>
+            <Button
+              variant="outline"
+              className="w-full rounded-full"
+              onClick={() => router.push("/signup")}
+            >
+              <UserPlus className="w-4 h-4 mr-2" />
+              Tạo tài khoản mới
+            </Button>
+          </div>
+          <p className="text-[11px] text-muted-foreground mt-8">
+            Bạn vẫn có thể xem trận trên các tab khác mà không cần đăng nhập.
+          </p>
+        </div>
+      </div>
+    )
+  }
+
+  const userStats = { ...userStatsMock, name: user.name, email: user.email }
+
   return (
     <div className="flex flex-col">
       {/* Header */}
       <header className="glass-dark sticky top-0 z-40 px-4 pt-4 pb-3 safe-top border-b border-border/20">
         <div className="flex items-center justify-between">
           <h1 className="text-xl font-bold">Hồ sơ</h1>
-          <Button variant="ghost" size="icon" className="rounded-full">
+          <Button variant="ghost" size="icon" className="rounded-full" disabled>
             <Settings className="w-5 h-5" />
           </Button>
         </div>
@@ -64,29 +160,86 @@ export function ProfileScreen() {
               <Avatar className="w-20 h-20 ring-4 ring-primary/30">
                 <AvatarImage src={userStats.avatar} alt={userStats.name} />
                 <AvatarFallback className="bg-primary/20 text-primary text-2xl font-bold">
-                  {userStats.name.charAt(0)}
+                  {avatarFallback(userStats.name)}
                 </AvatarFallback>
               </Avatar>
-              <Button 
-                size="icon" 
+              <Button
+                size="icon"
                 variant="secondary"
                 className="absolute -bottom-1 -right-1 w-7 h-7 rounded-full shadow-md"
+                onClick={() => setEditOpen(true)}
+                aria-label="Chỉnh sửa hồ sơ"
               >
                 <Edit2 className="w-3 h-3" />
               </Button>
             </div>
-            <div className="flex-1">
-              <h2 className="text-xl font-bold mb-1">{userStats.name}</h2>
-              <SkillBadge level={userStats.level} size="sm" />
-              <p className="text-xs text-muted-foreground mt-2">
-                Thành viên từ {userStats.memberSince}
-              </p>
+            <div className="flex-1 min-w-0">
+              <h2 className="text-xl font-bold mb-1 truncate">{userStats.name}</h2>
+              {userStats.email && (
+                <p className="text-xs text-muted-foreground mb-2 truncate">{userStats.email}</p>
+              )}
+              {user.rank ? (
+                <>
+                  <SkillBadge level={user.rank.tier} size="sm" />
+                  <p className="text-[11px] text-muted-foreground mt-1">{user.rank.display_name}</p>
+                </>
+              ) : (
+                <p className="text-[11px] text-muted-foreground italic">
+                  Chưa đánh giá trình độ
+                </p>
+              )}
+              <Button
+                size="sm"
+                variant="ghost"
+                className="rounded-full mt-2 -ml-2 h-7 px-3 text-xs text-primary"
+                onClick={() => setEditOpen(true)}
+              >
+                <Edit2 className="w-3 h-3 mr-1.5" />
+                Chỉnh sửa hồ sơ
+              </Button>
             </div>
           </div>
         </div>
 
+        {/* Personal info */}
+        <div className="px-4 pb-4">
+          <Card className="rounded-2xl border-border/50 overflow-hidden">
+            <div className="px-4 py-3 flex items-center justify-between border-b border-border/40">
+              <h3 className="text-sm font-semibold">Thông tin cá nhân</h3>
+              <Button
+                size="sm"
+                variant="ghost"
+                className="h-7 text-primary text-xs"
+                onClick={() => setEditOpen(true)}
+              >
+                Sửa
+              </Button>
+            </div>
+            <ul className="divide-y divide-border/40">
+              <ProfileRow
+                icon={<UserIcon className="w-4 h-4" />}
+                label="Giới tính"
+                value={GENDER_LABEL[user.gender] || GENDER_LABEL.unspecified}
+              />
+              <ProfileRow
+                icon={<Award className="w-4 h-4" />}
+                label="Trình độ"
+                value={user.rank?.display_name || "Chưa đánh giá"}
+                muted={!user.rank}
+              />
+              <ProfileRow
+                icon={<Phone className="w-4 h-4" />}
+                label="Số điện thoại"
+                value={user.phone || "Chưa cập nhật"}
+                muted={!user.phone}
+              />
+            </ul>
+          </Card>
+        </div>
+
         {/* Stats Card */}
         <div className="px-4 pb-4">
+          <MockSection>
           <Card className="bg-gradient-to-br from-accent to-accent/80 border-0 p-4 rounded-3xl overflow-hidden relative">
             <div className="absolute top-0 right-0 w-40 h-40 bg-primary/10 rounded-full blur-3xl" />
             
@@ -125,10 +278,12 @@ export function ProfileScreen() {
               </div>
             </div>
           </Card>
+          </MockSection>
         </div>
 
         {/* Win/Loss Progress */}
         <div className="px-4 pb-4">
+          <MockSection>
           <Card className="p-4 rounded-2xl border-border/50">
             <div className="flex items-center justify-between mb-3">
               <span className="text-sm font-semibold">Thắng / Thua</span>
@@ -147,10 +302,12 @@ export function ProfileScreen() {
               <span className="text-xs text-red-400">{userStats.losses} Thua</span>
             </div>
           </Card>
+          </MockSection>
         </div>
 
         {/* Quick Stats */}
         <div className="px-4 pb-4">
+          <MockSection>
           <div className="grid grid-cols-2 gap-3">
             <Card className="p-4 rounded-2xl border-border/50">
               <div className="flex items-center gap-3">
@@ -175,10 +332,12 @@ export function ProfileScreen() {
               </div>
             </Card>
           </div>
+          </MockSection>
         </div>
 
         {/* Achievements */}
         <div className="px-4 pb-4">
+          <MockSection>
           <div className="flex items-center justify-between mb-3">
             <h3 className="font-semibold">Thành tích</h3>
             <Button variant="ghost" size="sm" className="text-primary text-xs font-semibold">
@@ -203,10 +362,29 @@ export function ProfileScreen() {
               </div>
             ))}
           </div>
+          </MockSection>
+        </div>
+
+        {/* Logout */}
+        <div className="px-4 pb-4">
+          <Button
+            variant="outline"
+            className="w-full rounded-full border-destructive/40 text-destructive hover:bg-destructive/10"
+            onClick={handleLogout}
+            disabled={loggingOut}
+          >
+            {loggingOut ? (
+              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+            ) : (
+              <LogOut className="w-4 h-4 mr-2" />
+            )}
+            Đăng xuất
+          </Button>
         </div>
 
         {/* Recent Activity */}
         <div className="px-4 pb-8">
+          <MockSection>
           <div className="flex items-center justify-between mb-3">
             <h3 className="font-semibold">Hoạt động gần đây</h3>
             <Button variant="ghost" size="sm" className="text-primary text-xs font-semibold">
@@ -249,8 +427,11 @@ export function ProfileScreen() {
               </Card>
             ))}
           </div>
+          </MockSection>
         </div>
       </div>
+
+      <EditProfileSheet open={editOpen} onOpenChange={setEditOpen} />
     </div>
   )
 }

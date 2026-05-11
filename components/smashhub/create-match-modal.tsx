@@ -1,59 +1,65 @@
 "use client"
 
 import { useState } from "react"
-import { X, MapPin, Calendar, Clock, Users, Shuffle, ChevronRight, Check, Minus, Plus, Search } from "lucide-react"
+import { X, MapPin, Calendar, Clock, Users, Shuffle, ChevronRight, Check, Minus, Plus, Search, Swords, Loader2, FileText, Wallet } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
-import { Badge } from "@/components/ui/badge"
-import { ScrollArea } from "@/components/ui/scroll-area"
 import { cn } from "@/lib/utils"
-import { SkillBadge, type SkillLevel } from "./skill-badge"
+import { SkillBadge, SKILL_LABELS, type SkillLevel } from "./skill-badge"
+import { createGame, type Game } from "@/lib/api"
+import { formatPriceRange } from "@/lib/format"
 
 interface CreateMatchModalProps {
   open: boolean
   onOpenChange: (open: boolean) => void
+  onSuccess?: (game: Game) => void
 }
 
 const skillLevels: SkillLevel[] = [
-  "Newbie",
-  "Yếu",
-  "Yếu +",
-  "Trung bình yếu",
-  "Trung bình -",
-  "Trung bình +",
-  "Khá",
-  "Bán chuyên",
-  "Chuyên nghiệp",
+  "newbie",
+  "beginner_plus",
+  "lower_intermediate",
+  "intermediate",
+  "upper_intermediate",
+  "advanced",
+  "semi_pro",
+  "professional",
 ]
 
 const venues = [
-  { id: 1, name: "Nhà thi đấu Phú Thọ", address: "Quận 11, TP.HCM", courts: 12 },
-  { id: 2, name: "CLB Cầu Lông Tân Bình", address: "Quận Tân Bình, TP.HCM", courts: 8 },
-  { id: 3, name: "Galaxy Badminton", address: "Quận 7, TP.HCM", courts: 8 },
-  { id: 4, name: "Victory Sports", address: "Quận Bình Thạnh, TP.HCM", courts: 12 },
-  { id: 5, name: "Pro Badminton Center", address: "Quận 1, TP.HCM", courts: 6 },
+  { id: 1, name: "Nhà thi đấu Phú Thọ", address: "Quận 11, TP.HCM", courts: 12, lat: 10.7626, lng: 106.6601 },
+  { id: 2, name: "CLB Cầu Lông Tân Bình", address: "Quận Tân Bình, TP.HCM", courts: 8, lat: 10.8012, lng: 106.6384 },
+  { id: 3, name: "Galaxy Badminton", address: "Quận 7, TP.HCM", courts: 8, lat: 10.7300, lng: 106.7200 },
+  { id: 4, name: "Victory Sports", address: "Quận Bình Thạnh, TP.HCM", courts: 12, lat: 10.8105, lng: 106.7091 },
+  { id: 5, name: "Pro Badminton Center", address: "Quận 1, TP.HCM", courts: 6, lat: 10.7769, lng: 106.7009 },
 ]
 
 const timeSlots = [
   "06:00", "07:00", "08:00", "09:00", "10:00", "11:00",
-  "14:00", "15:00", "16:00", "17:00", "18:00", "19:00", "20:00", "21:00",
+  "14:00", "15:00", "16:00", "17:00", "18:00", "19:00", "20:00", "21:00", "22:00",
 ]
 
-export function CreateMatchModal({ open, onOpenChange }: CreateMatchModalProps) {
+export function CreateMatchModal({ open, onOpenChange, onSuccess }: CreateMatchModalProps) {
   const [step, setStep] = useState(1)
   const [selectedVenue, setSelectedVenue] = useState<typeof venues[0] | null>(null)
   const [selectedCourts, setSelectedCourts] = useState<number[]>([1])
   const [selectedDate, setSelectedDate] = useState<Date>(new Date())
   const [selectedTime, setSelectedTime] = useState<string>("18:00")
   const [duration, setDuration] = useState(2)
-  const [playerRange, setPlayerRange] = useState({ min: 6, max: 8 })
-  const [selectedLevels, setSelectedLevels] = useState<SkillLevel[]>(["Khá", "Bán chuyên"])
+  const [matchType, setMatchType] = useState<"singles" | "doubles">("doubles")
+  const [maxPlayers, setMaxPlayers] = useState(8)
+  const [selectedLevels, setSelectedLevels] = useState<SkillLevel[]>(["newbie", "beginner_plus"])
   const [shuffleMode, setShuffleMode] = useState(false)
+  const [description, setDescription] = useState("")
+  const [minPrice, setMinPrice] = useState<number>(0)
+  const [maxPrice, setMaxPrice] = useState<number>(0)
   const [venueSearch, setVenueSearch] = useState("")
+  const [submitting, setSubmitting] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
   const filteredVenues = venues.filter(v => 
     v.name.toLowerCase().includes(venueSearch.toLowerCase()) ||
@@ -76,13 +82,51 @@ export function CreateMatchModal({ open, onOpenChange }: CreateMatchModalProps) 
     )
   }
 
+  const handleSubmit = async () => {
+    if (!selectedVenue) return
+    setSubmitting(true)
+    setError(null)
+
+    const startDate = new Date(selectedDate)
+    const [h, m] = selectedTime.split(":").map(Number)
+    startDate.setHours(h, m, 0, 0)
+
+    const endDate = new Date(startDate.getTime() + duration * 60 * 60 * 1000)
+
+    const indices = selectedLevels.map(l => skillLevels.indexOf(l)).filter(i => i >= 0)
+    const minTier = indices.length > 0 ? skillLevels[Math.min(...indices)] : undefined
+    const maxTier = indices.length > 0 ? skillLevels[Math.max(...indices)] : undefined
+
+    const safeMin = Math.max(0, Math.floor(minPrice || 0))
+    const safeMax = Math.max(safeMin, Math.floor(maxPrice || safeMin))
+
+    try {
+      const game = await createGame({
+        start_time: startDate.toISOString(),
+        end_time: endDate.toISOString(),
+        lat: selectedVenue.lat,
+        lng: selectedVenue.lng,
+        match_type: matchType,
+        min_tier: minTier,
+        max_tier: maxTier,
+        max_players: maxPlayers,
+        courts: selectedCourts,
+        description: description || undefined,
+        min_price: safeMin,
+        max_price: safeMax,
+      })
+      resetAndClose()
+      onSuccess?.(game)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Có lỗi xảy ra")
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
   const handleNext = () => {
     if (step < 3) setStep(step + 1)
-    else {
-      // Submit logic here
-      onOpenChange(false)
-      setStep(1)
-    }
+    else handleSubmit()
   }
 
   const handleBack = () => {
@@ -94,7 +138,13 @@ export function CreateMatchModal({ open, onOpenChange }: CreateMatchModalProps) 
     setStep(1)
     setSelectedVenue(null)
     setSelectedCourts([1])
-    setSelectedLevels(["Khá", "Bán chuyên"])
+    setMatchType("doubles")
+    setMaxPlayers(8)
+    setSelectedLevels(["newbie", "beginner_plus"])
+    setDescription("")
+    setMinPrice(0)
+    setMaxPrice(0)
+    setError(null)
     onOpenChange(false)
   }
 
@@ -113,11 +163,14 @@ export function CreateMatchModal({ open, onOpenChange }: CreateMatchModalProps) 
 
   return (
     <Dialog open={open} onOpenChange={resetAndClose}>
-      <DialogContent className="max-w-md mx-auto h-[85dvh] flex flex-col p-0 gap-0 rounded-t-3xl">
+      <DialogContent showCloseButton={false} className="max-w-md mx-auto h-[85dvh] flex flex-col p-0 gap-0 rounded-t-3xl">
         {/* Header */}
         <DialogHeader className="px-4 pt-4 pb-3 border-b border-border/20 flex-shrink-0">
           <div className="flex items-center justify-between">
             <DialogTitle className="text-lg font-bold">Tạo trận đấu</DialogTitle>
+            <DialogDescription className="sr-only">
+              Thiết lập địa điểm, thời gian và thể thức để tạo trận đấu mới.
+            </DialogDescription>
             <Button variant="ghost" size="icon" className="rounded-full" onClick={resetAndClose}>
               <X className="w-5 h-5" />
             </Button>
@@ -142,7 +195,7 @@ export function CreateMatchModal({ open, onOpenChange }: CreateMatchModalProps) 
         </DialogHeader>
 
         {/* Content */}
-        <ScrollArea className="flex-1 px-4 py-4">
+        <div className="flex-1 min-h-0 overflow-y-auto px-4 py-4">
           {/* Step 1: Venue Selection */}
           {step === 1 && (
             <div className="space-y-4">
@@ -274,7 +327,7 @@ export function CreateMatchModal({ open, onOpenChange }: CreateMatchModalProps) 
                     variant="ghost"
                     size="icon"
                     className="rounded-full w-10 h-10"
-                    onClick={() => setDuration(Math.max(1, duration - 0.5))}
+                    onClick={() => setDuration(Math.max(0.5, duration - 0.5))}
                   >
                     <Minus className="w-4 h-4" />
                   </Button>
@@ -283,7 +336,7 @@ export function CreateMatchModal({ open, onOpenChange }: CreateMatchModalProps) 
                     variant="ghost"
                     size="icon"
                     className="rounded-full w-10 h-10"
-                    onClick={() => setDuration(Math.min(4, duration + 0.5))}
+                    onClick={() => setDuration(duration + 0.5)}
                   >
                     <Plus className="w-4 h-4" />
                   </Button>
@@ -295,58 +348,140 @@ export function CreateMatchModal({ open, onOpenChange }: CreateMatchModalProps) 
           {/* Step 3: Match Details */}
           {step === 3 && (
             <div className="space-y-6">
-              {/* Player Count */}
+              {/* Match Type */}
+              <div>
+                <Label className="text-sm font-semibold mb-3 block flex items-center gap-2">
+                  <Swords className="w-4 h-4" />
+                  Loại trận
+                </Label>
+                <div className="grid grid-cols-2 gap-3">
+                  <Button
+                    variant={matchType === "singles" ? "default" : "outline"}
+                    className="rounded-xl h-14 flex-col gap-1"
+                    onClick={() => setMatchType("singles")}
+                  >
+                    <span className="text-base">🏸</span>
+                    <span className="text-xs">Đơn (1v1)</span>
+                  </Button>
+                  <Button
+                    variant={matchType === "doubles" ? "default" : "outline"}
+                    className="rounded-xl h-14 flex-col gap-1"
+                    onClick={() => setMatchType("doubles")}
+                  >
+                    <span className="text-base">🏸🏸</span>
+                    <span className="text-xs">Đôi (2v2)</span>
+                  </Button>
+                </div>
+              </div>
+
+              {/* Max Players */}
               <div>
                 <Label className="text-sm font-semibold mb-3 block flex items-center gap-2">
                   <Users className="w-4 h-4" />
-                  Số người chơi
+                  Số người chơi tối đa
                 </Label>
-                <div className="flex gap-4">
-                  <div className="flex-1">
-                    <p className="text-xs text-muted-foreground mb-2">Tối thiểu</p>
-                    <div className="flex items-center justify-between bg-secondary rounded-2xl p-2">
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="rounded-full w-8 h-8"
-                        onClick={() => setPlayerRange(prev => ({ ...prev, min: Math.max(2, prev.min - 1) }))}
-                      >
-                        <Minus className="w-3 h-3" />
-                      </Button>
-                      <span className="text-lg font-bold">{playerRange.min}</span>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="rounded-full w-8 h-8"
-                        onClick={() => setPlayerRange(prev => ({ ...prev, min: Math.min(prev.max, prev.min + 1) }))}
-                      >
-                        <Plus className="w-3 h-3" />
-                      </Button>
+                <div className="flex items-center justify-between bg-secondary rounded-2xl p-3">
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="rounded-full w-10 h-10"
+                    onClick={() => setMaxPlayers(Math.max(2, maxPlayers - 1))}
+                  >
+                    <Minus className="w-4 h-4" />
+                  </Button>
+                  <span className="text-xl font-bold">{maxPlayers} người</span>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="rounded-full w-10 h-10"
+                    onClick={() => setMaxPlayers(maxPlayers + 1)}
+                  >
+                    <Plus className="w-4 h-4" />
+                  </Button>
+                </div>
+              </div>
+
+              {/* Price per slot */}
+              <div>
+                <Label className="text-sm font-semibold mb-3 block flex items-center gap-2">
+                  <Wallet className="w-4 h-4" />
+                  Giá / slot
+                  <span className="text-xs font-normal text-muted-foreground ml-1">
+                    (cho toàn bộ {duration} giờ)
+                  </span>
+                </Label>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <p className="text-[10px] text-muted-foreground mb-1">Tối thiểu</p>
+                    <div className="relative">
+                      <Input
+                        type="number"
+                        inputMode="numeric"
+                        min={0}
+                        step={10000}
+                        value={minPrice || ""}
+                        onChange={(e) => {
+                          const v = Number(e.target.value) || 0
+                          setMinPrice(v)
+                          if (maxPrice && v > maxPrice) setMaxPrice(v)
+                        }}
+                        placeholder="0"
+                        className="rounded-xl pr-10"
+                      />
+                      <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">đ</span>
                     </div>
                   </div>
-                  <div className="flex-1">
-                    <p className="text-xs text-muted-foreground mb-2">Tối đa</p>
-                    <div className="flex items-center justify-between bg-secondary rounded-2xl p-2">
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="rounded-full w-8 h-8"
-                        onClick={() => setPlayerRange(prev => ({ ...prev, max: Math.max(prev.min, prev.max - 1) }))}
-                      >
-                        <Minus className="w-3 h-3" />
-                      </Button>
-                      <span className="text-lg font-bold">{playerRange.max}</span>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="rounded-full w-8 h-8"
-                        onClick={() => setPlayerRange(prev => ({ ...prev, max: Math.min(12, prev.max + 1) }))}
-                      >
-                        <Plus className="w-3 h-3" />
-                      </Button>
+                  <div>
+                    <p className="text-[10px] text-muted-foreground mb-1">Tối đa</p>
+                    <div className="relative">
+                      <Input
+                        type="number"
+                        inputMode="numeric"
+                        min={0}
+                        step={10000}
+                        value={maxPrice || ""}
+                        onChange={(e) => setMaxPrice(Number(e.target.value) || 0)}
+                        placeholder="0"
+                        className="rounded-xl pr-10"
+                      />
+                      <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">đ</span>
                     </div>
                   </div>
                 </div>
+                <div className="flex flex-wrap gap-2 mt-2">
+                  {[
+                    { label: "Miễn phí", min: 0, max: 0 },
+                    { label: "~50K", min: 30000, max: 50000 },
+                    { label: "~80K", min: 50000, max: 80000 },
+                    { label: "~120K", min: 80000, max: 120000 },
+                    { label: "~200K", min: 150000, max: 200000 },
+                  ].map((preset) => {
+                    const active = minPrice === preset.min && maxPrice === preset.max
+                    return (
+                      <button
+                        key={preset.label}
+                        type="button"
+                        onClick={() => {
+                          setMinPrice(preset.min)
+                          setMaxPrice(preset.max)
+                        }}
+                        className={cn(
+                          "px-3 py-1 rounded-full text-xs border transition-colors",
+                          active
+                            ? "bg-primary text-primary-foreground border-primary"
+                            : "bg-secondary border-border/40 hover:border-primary/30",
+                        )}
+                      >
+                        {preset.label}
+                      </button>
+                    )
+                  })}
+                </div>
+                {(minPrice > 0 || maxPrice > 0) && (
+                  <p className="text-xs text-muted-foreground mt-2">
+                    Hiển thị cho người tham gia: {formatPriceRange(minPrice, maxPrice)}
+                  </p>
+                )}
               </div>
 
               {/* Skill Levels */}
@@ -372,9 +507,26 @@ export function CreateMatchModal({ open, onOpenChange }: CreateMatchModalProps) 
                 </div>
                 {selectedLevels.length > 0 && (
                   <p className="text-xs text-muted-foreground mt-2">
-                    Đã chọn: {selectedLevels.join(", ")}
+                    Đã chọn: {selectedLevels.map(l => SKILL_LABELS[l]).join(", ")}
                   </p>
                 )}
+              </div>
+
+              {/* Description */}
+              <div>
+                <Label className="text-sm font-semibold mb-3 block flex items-center gap-2">
+                  <FileText className="w-4 h-4" />
+                  Mô tả
+                </Label>
+                <textarea
+                  value={description}
+                  onChange={(e) => setDescription(e.target.value)}
+                  placeholder="VD: Giao lưu vui vẻ, mang vợt riêng, có nước uống..."
+                  maxLength={200}
+                  className="w-full rounded-xl bg-secondary border-0 px-3 py-2.5 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-primary/50 placeholder:text-muted-foreground"
+                  rows={3}
+                />
+                <p className="text-[10px] text-muted-foreground mt-1 text-right">{description.length}/200</p>
               </div>
 
               {/* Shuffle Mode */}
@@ -425,14 +577,36 @@ export function CreateMatchModal({ open, onOpenChange }: CreateMatchModalProps) 
                     }</span>
                   </div>
                   <div className="flex justify-between">
+                    <span className="text-muted-foreground">Loại trận</span>
+                    <span className="font-medium">{matchType === "singles" ? "Đơn (1v1)" : "Đôi (2v2)"}</span>
+                  </div>
+                  <div className="flex justify-between">
                     <span className="text-muted-foreground">Số người</span>
-                    <span className="font-medium">{playerRange.min} - {playerRange.max} người</span>
+                    <span className="font-medium">{maxPlayers} người</span>
+                  </div>
+                  {selectedLevels.length > 0 && (
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Trình độ</span>
+                      <span className="font-medium">{selectedLevels.map(l => SKILL_LABELS[l]).join(", ")}</span>
+                    </div>
+                  )}
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Giá / slot</span>
+                    <span className="font-medium">
+                      {minPrice > 0 || maxPrice > 0 ? formatPriceRange(minPrice, maxPrice) : "Chưa đặt"}
+                    </span>
                   </div>
                 </div>
               </Card>
+
+              {error && (
+                <Card className="p-3 rounded-2xl bg-destructive/10 border-destructive/20">
+                  <p className="text-sm text-destructive">{error}</p>
+                </Card>
+              )}
             </div>
           )}
-        </ScrollArea>
+        </div>
 
         {/* Footer */}
         <div className="px-4 py-4 border-t border-border/20 flex-shrink-0 safe-bottom">
@@ -447,10 +621,11 @@ export function CreateMatchModal({ open, onOpenChange }: CreateMatchModalProps) 
             <Button
               className="flex-1 rounded-full"
               onClick={handleNext}
-              disabled={step === 1 && !selectedVenue}
+              disabled={(step === 1 && !selectedVenue) || submitting}
             >
-              {step === 3 ? "Tạo trận đấu" : "Tiếp theo"}
-              {step < 3 && <ChevronRight className="w-4 h-4 ml-1" />}
+              {submitting && <Loader2 className="w-4 h-4 animate-spin mr-2" />}
+              {submitting ? "Đang tạo..." : step === 3 ? "Tạo trận đấu" : "Tiếp theo"}
+              {!submitting && step < 3 && <ChevronRight className="w-4 h-4 ml-1" />}
             </Button>
           </div>
         </div>

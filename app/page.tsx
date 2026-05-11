@@ -1,29 +1,72 @@
 "use client"
 
 import { useState } from "react"
-import { BottomNav } from "@/components/smashhub/bottom-nav"
+import { Loader2 } from "lucide-react"
+import { BottomNav, type AppTab } from "@/components/smashhub/bottom-nav"
 import { DesktopSidebar } from "@/components/smashhub/desktop-sidebar"
 import { HomeScreen } from "@/components/smashhub/home-screen"
 import { MapScreen } from "@/components/smashhub/map-screen"
 import { MatchesScreen } from "@/components/smashhub/matches-screen"
-import { RankingScreen } from "@/components/smashhub/ranking-screen"
+import { MyGamesScreen } from "@/components/smashhub/my-games-screen"
 import { ProfileScreen } from "@/components/smashhub/profile-screen"
 import { CreateMatchModal } from "@/components/smashhub/create-match-modal"
+import { GameDetailScreen } from "@/components/smashhub/game-detail-screen"
+import { useAuth, useRequireAuth } from "@/lib/auth-context"
 
 export default function SmashHubPro() {
-  const [activeTab, setActiveTab] = useState<"home" | "map" | "matches" | "ranking" | "profile">("home")
+  const { loading } = useAuth()
+  const requireAuth = useRequireAuth()
+  const [activeTab, setActiveTab] = useState<AppTab>("home")
   const [showCreateMatch, setShowCreateMatch] = useState(false)
+  const [selectedGameId, setSelectedGameId] = useState<number | null>(null)
+  const [refreshKey, setRefreshKey] = useState(0)
+
+  const openGameDetail = (id: number) => setSelectedGameId(id)
+  const closeGameDetail = () => setSelectedGameId(null)
+  const handleGameChanged = () => setRefreshKey((k) => k + 1)
+
+  const handleCreateMatch = () => {
+    if (!requireAuth()) return
+    setShowCreateMatch(true)
+  }
+
+  if (loading) {
+    return (
+      <div className="min-h-[100dvh] flex items-center justify-center bg-background">
+        <Loader2 className="w-6 h-6 animate-spin text-primary" />
+      </div>
+    )
+  }
 
   const renderScreen = () => {
     switch (activeTab) {
       case "home":
-        return <HomeScreen onCreateMatch={() => setShowCreateMatch(true)} />
+        return (
+          <HomeScreen
+            key={`home-${refreshKey}`}
+            onCreateMatch={handleCreateMatch}
+            onNavigate={setActiveTab}
+            onOpenGame={openGameDetail}
+          />
+        )
       case "map":
-        return <MapScreen />
+        return <MapScreen key={`map-${refreshKey}`} onOpenGame={openGameDetail} />
       case "matches":
-        return <MatchesScreen onCreateMatch={() => setShowCreateMatch(true)} />
-      case "ranking":
-        return <RankingScreen />
+        return (
+          <MatchesScreen
+            key={`matches-${refreshKey}`}
+            onCreateMatch={handleCreateMatch}
+            onOpenGame={openGameDetail}
+          />
+        )
+      case "my_games":
+        return (
+          <MyGamesScreen
+            key={`my-games-${refreshKey}`}
+            onCreateMatch={handleCreateMatch}
+            onOpenGame={openGameDetail}
+          />
+        )
       case "profile":
         return <ProfileScreen />
     }
@@ -36,11 +79,7 @@ export default function SmashHubPro() {
         <main className="h-[100dvh] overflow-y-auto pb-24">
           {renderScreen()}
         </main>
-        <BottomNav 
-          activeTab={activeTab} 
-          onTabChange={setActiveTab}
-          onCreateMatch={() => setShowCreateMatch(true)}
-        />
+        <BottomNav activeTab={activeTab} onTabChange={setActiveTab} />
       </div>
 
       {/* Desktop Layout */}
@@ -49,7 +88,7 @@ export default function SmashHubPro() {
         <DesktopSidebar
           activeTab={activeTab}
           onTabChange={setActiveTab}
-          onCreateMatch={() => setShowCreateMatch(true)}
+          onCreateMatch={handleCreateMatch}
         />
 
         {/* Main Content */}
@@ -149,9 +188,17 @@ export default function SmashHubPro() {
       </div>
 
       {/* Create Match Modal */}
-      <CreateMatchModal 
-        open={showCreateMatch} 
-        onOpenChange={setShowCreateMatch} 
+      <CreateMatchModal
+        open={showCreateMatch}
+        onOpenChange={setShowCreateMatch}
+        onSuccess={handleGameChanged}
+      />
+
+      {/* Game Detail Screen */}
+      <GameDetailScreen
+        gameId={selectedGameId}
+        onClose={closeGameDetail}
+        onChanged={handleGameChanged}
       />
     </>
   )

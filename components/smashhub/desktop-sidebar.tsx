@@ -1,24 +1,48 @@
 "use client"
 
-import { Home, Map, Trophy, User, Plus, Calendar, Settings, LogOut } from "lucide-react"
+import { useState } from "react"
+import { useRouter } from "next/navigation"
+import { Home, Map, User, Plus, Compass, CalendarCheck, Settings, LogOut, LogIn, Loader2 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
+import type { AppTab } from "./bottom-nav"
+import { useAuth } from "@/lib/auth-context"
 
 interface DesktopSidebarProps {
-  activeTab: "home" | "map" | "matches" | "ranking" | "profile"
-  onTabChange: (tab: "home" | "map" | "matches" | "ranking" | "profile") => void
+  activeTab: AppTab
+  onTabChange: (tab: AppTab) => void
   onCreateMatch: () => void
 }
 
-const navItems = [
-  { id: "home" as const, icon: Home, label: "Trang chủ" },
-  { id: "map" as const, icon: Map, label: "Bản đồ" },
-  { id: "matches" as const, icon: Calendar, label: "Trận đấu" },
-  { id: "ranking" as const, icon: Trophy, label: "Bảng xếp hạng" },
-  { id: "profile" as const, icon: User, label: "Cá nhân" },
+const navItems: Array<{ id: AppTab; icon: typeof Home; label: string }> = [
+  { id: "home", icon: Home, label: "Trang chủ" },
+  { id: "map", icon: Map, label: "Bản đồ" },
+  { id: "matches", icon: Compass, label: "Tìm trận" },
+  { id: "my_games", icon: CalendarCheck, label: "Của tôi" },
+  { id: "profile", icon: User, label: "Cá nhân" },
 ]
 
 export function DesktopSidebar({ activeTab, onTabChange, onCreateMatch }: DesktopSidebarProps) {
+  const router = useRouter()
+  const { user, logout } = useAuth()
+  const [loggingOut, setLoggingOut] = useState(false)
+
+  const handleLogout = async () => {
+    setLoggingOut(true)
+    try {
+      await logout()
+    } finally {
+      setLoggingOut(false)
+    }
+  }
+
+  const initials = (() => {
+    if (!user?.name) return "?"
+    const parts = user.name.trim().split(/\s+/)
+    const last = parts[parts.length - 1] || user.name
+    return last.charAt(0).toUpperCase()
+  })()
+
   return (
     <div className="w-64 bg-neutral-900/50 backdrop-blur-xl border-r border-neutral-800 flex flex-col">
       {/* Logo */}
@@ -36,19 +60,33 @@ export function DesktopSidebar({ activeTab, onTabChange, onCreateMatch }: Deskto
 
       {/* User Info */}
       <div className="p-4 border-b border-neutral-800">
-        <div className="flex items-center gap-3 p-3 rounded-2xl bg-neutral-800/50">
-          <Avatar className="w-10 h-10 ring-2 ring-primary/30">
-            <AvatarImage src="/placeholder.svg?height=40&width=40" alt="User" />
-            <AvatarFallback className="bg-primary/20 text-primary font-bold">TH</AvatarFallback>
-          </Avatar>
-          <div className="flex-1 min-w-0">
-            <p className="font-semibold text-foreground truncate">Tuấn Hưng</p>
-            <p className="text-xs text-muted-foreground">GR: 2,480</p>
+        {user ? (
+          <div className="flex items-center gap-3 p-3 rounded-2xl bg-neutral-800/50">
+            <Avatar className="w-10 h-10 ring-2 ring-primary/30">
+              <AvatarImage src="/placeholder.svg?height=40&width=40" alt="User" />
+              <AvatarFallback className="bg-primary/20 text-primary font-bold">
+                {initials}
+              </AvatarFallback>
+            </Avatar>
+            <div className="flex-1 min-w-0">
+              <p className="font-semibold text-foreground truncate">{user.name}</p>
+              <p className="text-xs text-muted-foreground truncate">{user.email}</p>
+            </div>
           </div>
-          <div className="px-2 py-1 rounded-lg bg-primary/20 text-primary text-xs font-medium">
-            Khá
-          </div>
-        </div>
+        ) : (
+          <button
+            onClick={() => router.push("/login?next=/")}
+            className="w-full flex items-center gap-3 p-3 rounded-2xl bg-neutral-800/50 hover:bg-neutral-800 transition-colors text-left"
+          >
+            <div className="w-10 h-10 rounded-full bg-primary/15 flex items-center justify-center text-primary">
+              <LogIn className="w-5 h-5" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="font-semibold text-foreground truncate">Đăng nhập</p>
+              <p className="text-xs text-muted-foreground truncate">Để tạo & tham gia trận</p>
+            </div>
+          </button>
+        )}
       </div>
 
       {/* Create Match Button */}
@@ -97,10 +135,24 @@ export function DesktopSidebar({ activeTab, onTabChange, onCreateMatch }: Deskto
           <Settings className="w-5 h-5" />
           <span className="font-medium">Cài đặt</span>
         </button>
-        <button className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-muted-foreground hover:text-red-400 hover:bg-red-400/10 transition-colors">
-          <LogOut className="w-5 h-5" />
-          <span className="font-medium">Đăng xuất</span>
-        </button>
+        {user ? (
+          <button
+            onClick={handleLogout}
+            disabled={loggingOut}
+            className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-muted-foreground hover:text-red-400 hover:bg-red-400/10 transition-colors disabled:opacity-60"
+          >
+            {loggingOut ? <Loader2 className="w-5 h-5 animate-spin" /> : <LogOut className="w-5 h-5" />}
+            <span className="font-medium">Đăng xuất</span>
+          </button>
+        ) : (
+          <button
+            onClick={() => router.push("/signup")}
+            className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-muted-foreground hover:text-primary hover:bg-primary/10 transition-colors"
+          >
+            <Plus className="w-5 h-5" />
+            <span className="font-medium">Tạo tài khoản</span>
+          </button>
+        )}
       </div>
     </div>
   )
