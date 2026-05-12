@@ -55,6 +55,22 @@ steps:
       - --quiet
       - --set-env-vars=NEXT_PUBLIC_API_URL=${_NEXT_PUBLIC_API_URL}
 
+  - id: cleanup-revisions
+    name: gcr.io/google.com/cloudsdktool/cloud-sdk:slim
+    entrypoint: bash
+    args:
+      - -c
+      - |
+        set -euo pipefail
+        gcloud run revisions list \
+          --service=${_CLOUD_RUN_SERVICE} \
+          --region=${_REGION} \
+          --format="value(REVISION)" \
+          --sort-by=~creationTimestamp | tail -n +3 | while read -r rev; do
+            echo "Deleting old revision: $${rev}"
+            gcloud run revisions delete "$${rev}" --region=${_REGION} --quiet || true
+          done
+
 images:
   - ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_AR_REPOSITORY}/fe:$SHORT_SHA
   - ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_AR_REPOSITORY}/fe:staging-latest
