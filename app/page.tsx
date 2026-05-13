@@ -97,9 +97,6 @@ export default function SmashHubPro() {
           <div className="relative">
             {/* Phone Frame */}
             <div className="relative w-[390px] h-[844px] bg-background rounded-[3rem] border-[14px] border-neutral-800 shadow-2xl shadow-black/50 overflow-hidden">
-              {/* Notch */}
-              <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[120px] h-[35px] bg-neutral-800 rounded-b-3xl z-50" />
-              
               {/* Screen Content */}
               <div className="h-full overflow-y-auto">
                 {renderScreen()}
