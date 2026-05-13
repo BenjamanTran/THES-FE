@@ -13,6 +13,7 @@ import {
   Plus,
   Users,
   Wallet,
+  Swords,
 } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -312,6 +313,15 @@ export function MyGamesScreen({ onCreateMatch, onOpenGame }: MyGamesScreenProps)
                         <Badge variant="outline" className="text-[10px] px-1.5 py-0">
                           {game.match_type === "singles" ? "Đơn" : "Đôi"}
                         </Badge>
+                        {(game.matches_count ?? 0) > 0 && (
+                          <Badge
+                            variant="outline"
+                            className="text-[10px] px-1.5 py-0 flex items-center gap-0.5"
+                          >
+                            <Swords className="w-2.5 h-2.5" />
+                            {game.matches_finished ?? 0}/{game.matches_count} trận
+                          </Badge>
+                        )}
                         {(game.min_price > 0 || game.max_price > 0) && (
                           <Badge
                             variant="outline"

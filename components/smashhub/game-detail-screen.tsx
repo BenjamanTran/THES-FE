@@ -17,6 +17,9 @@ import {
   FileText,
   CheckCircle2,
   Wallet,
+  Trophy,
+  Plus,
+  Flag,
 } from "lucide-react"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Badge } from "@/components/ui/badge"
@@ -25,11 +28,15 @@ import { Card } from "@/components/ui/card"
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog"
 import { SkillBadge } from "./skill-badge"
 import { GenderIcon } from "./gender-icon"
+import { CreateMatchSheet } from "./create-match-sheet"
+import { ScoreEntryModal } from "./score-entry-modal"
 import {
   fetchGame,
   joinGame,
   leaveGame,
   type GameDetail,
+  type MatchSummary,
+  type FinishMatchResponse,
 } from "@/lib/api"
 import { useAuth, useRequireAuth } from "@/lib/auth-context"
 import { reverseGeocode } from "@/lib/geocode"
@@ -89,7 +96,8 @@ export function GameDetailScreen({ gameId, onClose, onChanged }: GameDetailScree
   const [warning, setWarning] = useState<string | null>(null)
   const [resolvedAddress, setResolvedAddress] = useState<string | null>(null)
   const [resolvingAddress, setResolvingAddress] = useState(false)
-
+  const [showCreateMatch, setShowCreateMatch] = useState(false)
+  const [finishingMatch, setFinishingMatch] = useState<MatchSummary | null>(null)
   const open = gameId !== null
 
   const loadGame = useCallback(
@@ -115,6 +123,9 @@ export function GameDetailScreen({ gameId, onClose, onChanged }: GameDetailScree
       setError(null)
       setWarning(null)
       setResolvedAddress(null)
+      setActionLoading(false)
+      setShowCreateMatch(false)
+      setFinishingMatch(null)
       return
     }
     loadGame(gameId)
@@ -185,6 +196,7 @@ export function GameDetailScreen({ gameId, onClose, onChanged }: GameDetailScree
       onClose()
     } catch (err) {
       setError(err instanceof Error ? err.message : "Không thể rời trận")
+    } finally {
       setActionLoading(false)
     }
   }
@@ -192,6 +204,7 @@ export function GameDetailScreen({ gameId, onClose, onChanged }: GameDetailScree
   const primaryAction = useMemo(() => {
     if (!game) return null
     if (game.status === "cancelled" || game.status === "finished" || isPast) return null
+
     if (game.status === "ongoing") return null
 
     if (isHost) {
@@ -227,6 +240,39 @@ export function GameDetailScreen({ gameId, onClose, onChanged }: GameDetailScree
       onClick: handleJoin,
     }
   }, [game, isHost, isParticipant, isPast])
+
+  const handleMatchCreated = () => {
+    setShowCreateMatch(false)
+    if (game) loadGame(game.id)
+    onChanged?.()
+  }
+
+  const handleMatchFinished = (_res: FinishMatchResponse) => {
+    setFinishingMatch(null)
+    if (game) loadGame(game.id)
+    onChanged?.()
+  }
+
+  const canCreateMatch = isHost && (game?.status === "ongoing" || game?.status === "full")
+
+  const playerMatchCounts = useMemo(() => {
+    const counts: Record<number, { played: number; wins: number }> = {}
+    if (!game?.matches) return counts
+    for (const match of game.matches) {
+      const allPlayers = [...(match.team_a || []), ...(match.team_b || [])]
+      for (const p of allPlayers) {
+        if (!counts[p.id]) counts[p.id] = { played: 0, wins: 0 }
+        counts[p.id].played += 1
+        if (match.status === "finished" && match.winner_team) {
+          const isInWinnerTeam =
+            (match.winner_team === "team_a" && match.team_a.some((t) => t.id === p.id)) ||
+            (match.winner_team === "team_b" && match.team_b.some((t) => t.id === p.id))
+          if (isInWinnerTeam) counts[p.id].wins += 1
+        }
+      }
+    }
+    return counts
+  }, [game?.matches])
 
   const fitInfo = fitMeta(game?.fit_level)
 
@@ -407,6 +453,7 @@ export function GameDetailScreen({ gameId, onClose, onChanged }: GameDetailScree
                   {game.players.map((player) => {
                     const isThisHost = player.id === game.host?.id
                     const isMe = player.id === currentUserId
+                    const stats = playerMatchCounts[player.id]
                     return (
                       <div key={player.id} className="flex items-center gap-3">
                         <div className="relative flex-shrink-0">
@@ -435,12 +482,21 @@ export function GameDetailScreen({ gameId, onClose, onChanged }: GameDetailScree
                             )}
                           </div>
                         </div>
-                        {isThisHost && (
-                          <Badge className="bg-amber-500/20 text-amber-400 border-0 text-[10px] px-1.5">
-                            <Crown className="w-3 h-3 mr-1" />
-                            Host
-                          </Badge>
-                        )}
+                        <div className="flex flex-col items-end gap-0.5 flex-shrink-0">
+                          {isThisHost && (
+                            <Badge className="bg-amber-500/20 text-amber-400 border-0 text-[10px] px-1.5">
+                              <Crown className="w-3 h-3 mr-1" />
+                              Host
+                            </Badge>
+                          )}
+                          {stats && stats.played > 0 && (
+                            <span className="text-[10px] font-semibold">
+                              {stats.played} trận
+                              {stats.wins > 0 && <span className="text-emerald-400"> {stats.wins}W</span>}
+                              {stats.played - stats.wins > 0 && <span className="text-red-400"> {stats.played - stats.wins}L</span>}
+                            </span>
+                          )}
+                        </div>
                       </div>
                     )
                   })}
@@ -457,6 +513,133 @@ export function GameDetailScreen({ gameId, onClose, onChanged }: GameDetailScree
                   )}
                 </div>
               </Card>
+
+              {(game.status === "ongoing" || game.status === "full" || (game.matches && game.matches.length > 0)) && (
+                <Card className="p-4 rounded-2xl border-border/50">
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="flex items-center gap-2">
+                      <Swords className="w-4 h-4 text-primary" />
+                      <span className="text-sm font-semibold">Các trận đấu</span>
+                      {game.matches && game.matches.length > 0 && (
+                        <Badge variant="secondary" className="rounded-full text-[10px]">
+                          {game.matches.length}
+                        </Badge>
+                      )}
+                    </div>
+                    {canCreateMatch && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="rounded-full text-xs h-7 px-2.5"
+                        onClick={() => setShowCreateMatch(true)}
+                      >
+                        <Plus className="w-3 h-3 mr-1" />
+                        Tạo trận
+                      </Button>
+                    )}
+                  </div>
+
+                  {(!game.matches || game.matches.length === 0) ? (
+                    <p className="text-xs text-muted-foreground text-center py-4">
+                      Chưa có trận đấu nào. Host có thể tạo trận mới.
+                    </p>
+                  ) : (
+                    <div className="space-y-2">
+                      {game.matches.map((match) => {
+                        const isFinished = match.status === "finished"
+                        const canFinishThis = isParticipant && !isFinished
+                        return (
+                          <div
+                            key={match.id}
+                            className={`p-3 rounded-xl border ${
+                              isFinished
+                                ? "border-border/30 bg-secondary/30"
+                                : "border-primary/20 bg-primary/5"
+                            }`}
+                          >
+                            <div className="flex items-center justify-between mb-2">
+                              <div className="flex items-center gap-2">
+                                <span className="text-xs font-semibold text-muted-foreground">
+                                  Trận {match.match_number}
+                                </span>
+                                <Badge
+                                  variant="outline"
+                                  className={`text-[10px] px-1.5 py-0 rounded-full ${
+                                    isFinished
+                                      ? "bg-neutral-500/20 text-neutral-300 border-neutral-500/30"
+                                      : "bg-emerald-500/20 text-emerald-400 border-emerald-500/30"
+                                  }`}
+                                >
+                                  {isFinished ? "Kết thúc" : "Đang chơi"}
+                                </Badge>
+                              </div>
+                              {canFinishThis && (
+                                <Button
+                                  size="sm"
+                                  className="rounded-full text-xs h-7 px-3 bg-amber-500 hover:bg-amber-600 text-white shadow-sm shadow-amber-500/30"
+                                  onClick={() => setFinishingMatch(match)}
+                                >
+                                  <Flag className="w-3.5 h-3.5 mr-1" />
+                                  Kết thúc
+                                </Button>
+                              )}
+                            </div>
+
+                            <div className="flex items-center justify-between">
+                              <div className="flex-1">
+                                <p className="text-[10px] text-muted-foreground mb-0.5">Team A</p>
+                                <div className="flex flex-wrap gap-1">
+                                  {match.team_a.map((p) => (
+                                    <Badge key={p.id} variant="secondary" className="text-[10px] px-1.5 py-0">
+                                      {p.name || `#${p.id}`}
+                                    </Badge>
+                                  ))}
+                                </div>
+                              </div>
+
+                              {isFinished && match.team_a_score != null && match.team_b_score != null ? (
+                                <div className="flex items-center gap-2 mx-3 flex-shrink-0">
+                                  <span className={`text-lg font-bold ${match.winner_team === "team_a" ? "text-amber-400" : "text-muted-foreground"}`}>
+                                    {match.team_a_score}
+                                  </span>
+                                  <span className="text-xs text-muted-foreground">–</span>
+                                  <span className={`text-lg font-bold ${match.winner_team === "team_b" ? "text-amber-400" : "text-muted-foreground"}`}>
+                                    {match.team_b_score}
+                                  </span>
+                                </div>
+                              ) : (
+                                <div className="mx-3 flex-shrink-0">
+                                  <span className="text-xs text-muted-foreground font-medium">vs</span>
+                                </div>
+                              )}
+
+                              <div className="flex-1 text-right">
+                                <p className="text-[10px] text-muted-foreground mb-0.5">Team B</p>
+                                <div className="flex flex-wrap gap-1 justify-end">
+                                  {match.team_b.map((p) => (
+                                    <Badge key={p.id} variant="secondary" className="text-[10px] px-1.5 py-0">
+                                      {p.name || `#${p.id}`}
+                                    </Badge>
+                                  ))}
+                                </div>
+                              </div>
+                            </div>
+
+                            {isFinished && match.winner_team && (
+                              <div className="flex items-center justify-center gap-1 mt-2 pt-2 border-t border-border/20">
+                                <Trophy className="w-3 h-3 text-amber-400" />
+                                <span className="text-[10px] text-amber-400 font-medium">
+                                  {match.winner_team === "team_a" ? "Team A" : "Team B"} thắng
+                                </span>
+                              </div>
+                            )}
+                          </div>
+                        )
+                      })}
+                    </div>
+                  )}
+                </Card>
+              )}
 
               {game.description && (
                 <Card className="p-4 rounded-2xl border-border/50">
@@ -526,6 +709,28 @@ export function GameDetailScreen({ gameId, onClose, onChanged }: GameDetailScree
           </div>
         </footer>
       </DialogContent>
+
+      {game && (
+        <CreateMatchSheet
+          open={showCreateMatch}
+          onOpenChange={setShowCreateMatch}
+          gameId={game.id}
+          players={game.players}
+          matchType={game.match_type}
+          onCreated={handleMatchCreated}
+        />
+      )}
+
+      {game && finishingMatch && (
+        <ScoreEntryModal
+          open={!!finishingMatch}
+          onOpenChange={(v) => !v && setFinishingMatch(null)}
+          gameId={game.id}
+          matchId={finishingMatch.id}
+          matchNumber={finishingMatch.match_number}
+          onFinished={handleMatchFinished}
+        />
+      )}
     </Dialog>
   )
 }

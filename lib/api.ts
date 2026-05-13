@@ -64,6 +64,8 @@ export interface Game {
   fit_level?: 'good' | 'warning' | 'hard';
   distance_km?: number;
   participants_summary?: ParticipantSummary[];
+  matches_count?: number;
+  matches_finished?: number;
 }
 
 export interface GamePlayer {
@@ -73,8 +75,64 @@ export interface GamePlayer {
   rank?: PlayerRank | null;
 }
 
+export interface MatchPlayer {
+  id: number;
+  name: string | null;
+}
+
+export interface MatchSummary {
+  id: number;
+  match_number: number;
+  status: 'pending' | 'ongoing' | 'finished';
+  team_a_score: number | null;
+  team_b_score: number | null;
+  winner_team: 'team_a' | 'team_b' | null;
+  team_a: MatchPlayer[];
+  team_b: MatchPlayer[];
+}
+
+export interface MatchDetail extends MatchSummary {
+  started_at: string | null;
+  finished_at: string | null;
+  team_a: MatchDetailPlayer[];
+  team_b: MatchDetailPlayer[];
+}
+
+export interface MatchDetailPlayer {
+  id: number;
+  name: string | null;
+  gender?: Gender;
+  rank?: PlayerRank | null;
+  winner: boolean;
+}
+
+export interface FinishMatchParams {
+  team_a_score?: number;
+  team_b_score?: number;
+  winner_team?: 'team_a' | 'team_b';
+}
+
+export interface FinishMatchParticipant {
+  user_id: number;
+  name: string;
+  team: 'team_a' | 'team_b';
+  winner: boolean;
+  rating_change: number;
+}
+
+export interface FinishMatchResponse {
+  match: MatchDetail;
+  participants: FinishMatchParticipant[];
+}
+
+export interface CreateMatchParams {
+  team_a: number[];
+  team_b: number[];
+}
+
 export interface GameDetail extends Game {
   players: GamePlayer[];
+  matches: MatchSummary[];
 }
 
 export interface JoinResponse {
@@ -147,6 +205,26 @@ export function createGame(params: CreateGameParams) {
   return request<Game>('/api/v1/games', {
     method: 'POST',
     body: JSON.stringify(params),
+  });
+}
+
+// --- Matches ----------------------------------------------------------
+
+export function fetchMatches(gameId: number) {
+  return request<{ matches: MatchDetail[] }>(`/api/v1/games/${gameId}/matches`);
+}
+
+export function createMatch(gameId: number, params: CreateMatchParams) {
+  return request<MatchDetail>(`/api/v1/games/${gameId}/matches`, {
+    method: 'POST',
+    body: JSON.stringify(params),
+  });
+}
+
+export function finishMatch(gameId: number, matchId: number, params?: FinishMatchParams) {
+  return request<FinishMatchResponse>(`/api/v1/games/${gameId}/matches/${matchId}/finish`, {
+    method: 'POST',
+    body: JSON.stringify(params ?? {}),
   });
 }
 

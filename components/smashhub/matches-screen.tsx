@@ -13,6 +13,7 @@ import {
   Locate,
   X,
   Wallet,
+  Swords,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
@@ -552,6 +553,15 @@ export function MatchesScreen({ onCreateMatch, onOpenGame }: MatchesScreenProps)
                             Phù hợp
                           </Badge>
                         )}
+                        {(game.matches_count ?? 0) > 0 && (
+                          <Badge
+                            variant="outline"
+                            className="text-[10px] px-1.5 py-0 flex items-center gap-0.5"
+                          >
+                            <Swords className="w-2.5 h-2.5" />
+                            {game.matches_finished ?? 0}/{game.matches_count} trận
+                          </Badge>
+                        )}
                         {(game.min_price > 0 || game.max_price > 0) && (
                           <Badge
                             variant="outline"
@@ -562,16 +572,6 @@ export function MatchesScreen({ onCreateMatch, onOpenGame }: MatchesScreenProps)
                           </Badge>
                         )}
                       </div>
-                      {game.participants_summary && game.participants_summary.length > 0 && (
-                        <div className="flex items-center gap-1.5 mt-2">
-                          {game.participants_summary.map((p, i) => (
-                            <div key={i} className="flex items-center gap-0.5">
-                              <GenderIcon gender={p.gender} size="sm" />
-                              <SkillBadge level={p.tier} size="xs" compact showIcon={false} />
-                            </div>
-                          ))}
-                        </div>
-                      )}
                     </div>
                     <div className="flex flex-col items-end gap-2 flex-shrink-0">
                       <div className="flex items-center gap-1 bg-secondary rounded-full px-2 py-1">
