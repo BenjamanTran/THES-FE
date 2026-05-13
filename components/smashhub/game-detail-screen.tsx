@@ -24,6 +24,7 @@ import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog"
 import { SkillBadge } from "./skill-badge"
+import { GenderIcon } from "./gender-icon"
 import {
   fetchGame,
   joinGame,
@@ -242,7 +243,7 @@ export function GameDetailScreen({ gameId, onClose, onChanged }: GameDetailScree
           Thông tin chi tiết về trận đấu, danh sách người chơi và các hành động tham gia hoặc rời trận.
         </DialogDescription>
 
-        <header className="glass-dark px-4 pt-4 pb-3 border-b border-border/20 flex-shrink-0 safe-top">
+        <header className="glass-dark px-4 pt-4 pb-3 border-b border-border/20 flex-shrink-0 safe-top z-50 relative">
           <div className="flex items-center justify-between">
             <Button variant="ghost" size="icon" className="rounded-full -ml-2" onClick={onClose}>
               <ArrowLeft className="w-5 h-5" />
@@ -408,16 +409,31 @@ export function GameDetailScreen({ gameId, onClose, onChanged }: GameDetailScree
                     const isMe = player.id === currentUserId
                     return (
                       <div key={player.id} className="flex items-center gap-3">
-                        <Avatar className="w-9 h-9">
-                          <AvatarFallback className="bg-primary/20 text-primary text-xs font-semibold">
-                            {avatarLabel(player.name)}
-                          </AvatarFallback>
-                        </Avatar>
+                        <div className="relative flex-shrink-0">
+                          <Avatar className="w-9 h-9">
+                            <AvatarFallback className="bg-primary/20 text-primary text-xs font-semibold">
+                              {avatarLabel(player.name)}
+                            </AvatarFallback>
+                          </Avatar>
+                          {player.gender && (
+                            <span className="absolute -bottom-0.5 -right-0.5 bg-background rounded-full p-0.5">
+                              <GenderIcon gender={player.gender} size="sm" />
+                            </span>
+                          )}
+                        </div>
                         <div className="flex-1 min-w-0">
                           <p className="text-sm font-medium truncate">
                             {player.name || `User #${player.id}`}
                             {isMe && <span className="text-xs text-muted-foreground"> (bạn)</span>}
                           </p>
+                          <div className="flex items-center gap-1.5 mt-0.5">
+                            <SkillBadge level={player.rank?.tier ?? null} size="xs" compact />
+                            {player.rank && (
+                              <span className="text-[10px] text-muted-foreground">
+                                {player.rank.rating}
+                              </span>
+                            )}
+                          </div>
                         </div>
                         {isThisHost && (
                           <Badge className="bg-amber-500/20 text-amber-400 border-0 text-[10px] px-1.5">

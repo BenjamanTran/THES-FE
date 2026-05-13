@@ -31,6 +31,18 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
   return res.json();
 }
 
+export interface PlayerRank {
+  tier: Tier;
+  division: number | null;
+  rating: number;
+  display_name: string;
+}
+
+export interface ParticipantSummary {
+  gender: Gender;
+  tier: Tier | null;
+}
+
 export interface Game {
   id: number;
   start_time: string;
@@ -51,10 +63,18 @@ export interface Game {
   host: { id: number; name: string | null } | null;
   fit_level?: 'good' | 'warning' | 'hard';
   distance_km?: number;
+  participants_summary?: ParticipantSummary[];
+}
+
+export interface GamePlayer {
+  id: number;
+  name: string | null;
+  gender?: Gender;
+  rank?: PlayerRank | null;
 }
 
 export interface GameDetail extends Game {
-  players: Array<{ id: number; name: string | null }>;
+  players: GamePlayer[];
 }
 
 export interface JoinResponse {
@@ -150,12 +170,7 @@ export interface AuthUser {
   name: string;
   gender: Gender;
   phone: string | null;
-  rank: {
-    tier: Tier;
-    division: number | null;
-    rating: number;
-    display_name: string;
-  } | null;
+  rank: PlayerRank | null;
 }
 
 export interface UpdateProfileParams {

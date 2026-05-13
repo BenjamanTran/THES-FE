@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { SkillBadge } from "./skill-badge"
+import { GenderIcon } from "./gender-icon"
 import { fetchMyGames, type Game } from "@/lib/api"
 import { useAuth } from "@/lib/auth-context"
 import { MockSection } from "./mock-section"
@@ -253,6 +254,16 @@ export function HomeScreen({ onCreateMatch, onNavigate, onOpenGame }: HomeScreen
                           {game.match_type === "singles" ? "Đơn" : "Đôi"}
                         </Badge>
                       </div>
+                      {game.participants_summary && game.participants_summary.length > 0 && (
+                        <div className="flex items-center gap-1.5 mt-2">
+                          {game.participants_summary.map((p, i) => (
+                            <div key={i} className="flex items-center gap-0.5">
+                              <GenderIcon gender={p.gender} size="sm" />
+                              <SkillBadge level={p.tier} size="xs" compact showIcon={false} />
+                            </div>
+                          ))}
+                        </div>
+                      )}
                     </div>
                     <div className="flex flex-col items-end gap-2 ml-3">
                       <div className="flex items-center gap-1 bg-secondary rounded-full px-2 py-1">

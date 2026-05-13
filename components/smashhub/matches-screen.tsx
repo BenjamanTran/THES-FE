@@ -27,6 +27,7 @@ import {
   SheetTrigger,
 } from "@/components/ui/sheet"
 import { SkillBadge, SKILL_LABELS, type SkillLevel } from "./skill-badge"
+import { GenderIcon } from "./gender-icon"
 import { fetchGamesSearch, type Game } from "@/lib/api"
 import { useAuth } from "@/lib/auth-context"
 import { useGeolocation } from "@/hooks/use-geolocation"
@@ -561,6 +562,16 @@ export function MatchesScreen({ onCreateMatch, onOpenGame }: MatchesScreenProps)
                           </Badge>
                         )}
                       </div>
+                      {game.participants_summary && game.participants_summary.length > 0 && (
+                        <div className="flex items-center gap-1.5 mt-2">
+                          {game.participants_summary.map((p, i) => (
+                            <div key={i} className="flex items-center gap-0.5">
+                              <GenderIcon gender={p.gender} size="sm" />
+                              <SkillBadge level={p.tier} size="xs" compact showIcon={false} />
+                            </div>
+                          ))}
+                        </div>
+                      )}
                     </div>
                     <div className="flex flex-col items-end gap-2 flex-shrink-0">
                       <div className="flex items-center gap-1 bg-secondary rounded-full px-2 py-1">

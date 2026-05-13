@@ -25,9 +25,10 @@ export const SKILL_LABELS: Record<SkillLevel, string> = {
 }
 
 interface SkillBadgeProps {
-  level: string
+  level: string | null | undefined
   size?: "xs" | "sm" | "md"
   showIcon?: boolean
+  compact?: boolean
 }
 
 const skillColors: Record<string, { bg: string; text: string; border: string }> = {
@@ -52,15 +53,24 @@ const skillIcons: Record<string, string> = {
   professional: "👑",
 }
 
-export function SkillBadge({ level, size = "md", showIcon = true }: SkillBadgeProps) {
-  const colors = skillColors[level] || skillColors["newbie"]
-  const icon = skillIcons[level] || "🏸"
-  const label = SKILL_LABELS[level as SkillLevel] || level
+const UNRANKED_COLORS = { bg: "bg-neutral-500/20", text: "text-neutral-400", border: "border-neutral-500/30" }
+
+export function SkillBadge({ level, size = "md", showIcon = true, compact = false }: SkillBadgeProps) {
+  const isUnranked = !level
+  const colors = isUnranked ? UNRANKED_COLORS : (skillColors[level] || skillColors["newbie"])
+  const icon = isUnranked ? "—" : (skillIcons[level] || "🏸")
+  const label = isUnranked ? "Unranked" : (SKILL_LABELS[level as SkillLevel] || level)
   
   const sizeClasses = {
     xs: "text-[10px] px-1.5 py-0 h-5",
     sm: "text-xs px-2 py-0.5 h-6",
     md: "text-sm px-3 py-1 h-7",
+  }
+
+  const compactSizeClasses = {
+    xs: "text-[9px] px-1 py-0 h-4",
+    sm: "text-[10px] px-1.5 py-0 h-5",
+    md: "text-xs px-2 py-0.5 h-6",
   }
 
   return (
@@ -70,11 +80,11 @@ export function SkillBadge({ level, size = "md", showIcon = true }: SkillBadgePr
         colors.bg,
         colors.text,
         colors.border,
-        sizeClasses[size],
-        "font-semibold border rounded-full"
+        compact ? compactSizeClasses[size] : sizeClasses[size],
+        "font-semibold border rounded-full whitespace-nowrap"
       )}
     >
-      {showIcon && <span className="mr-1">{icon}</span>}
+      {showIcon && !compact && <span className="mr-1">{icon}</span>}
       {label}
     </Badge>
   )
