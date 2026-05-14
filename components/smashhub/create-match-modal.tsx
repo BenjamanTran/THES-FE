@@ -12,6 +12,7 @@ import { cn } from "@/lib/utils"
 import { SkillBadge, SKILL_LABELS, type SkillLevel } from "./skill-badge"
 import { createGame, fetchVenues, createVenue, type Game, type Venue } from "@/lib/api"
 import { formatPriceRange } from "@/lib/format"
+import { forwardGeocode } from "@/lib/geocode"
 
 interface CreateMatchModalProps {
   open: boolean
@@ -39,13 +40,18 @@ export function CreateMatchModal({ open, onOpenChange, onSuccess }: CreateMatchM
   const [step, setStep] = useState(1)
   const [selectedVenue, setSelectedVenue] = useState<Venue | null>(null)
   const [courtCount, setCourtCount] = useState(1)
-  const [selectedDate, setSelectedDate] = useState<Date>(new Date())
+  const [selectedDate, setSelectedDate] = useState<Date>(() => {
+    const now = new Date()
+    if (now.getHours() >= 22) now.setDate(now.getDate() + 1)
+    return now
+  })
   const [selectedTime, setSelectedTime] = useState<string>("18:00")
   const [duration, setDuration] = useState(2)
   const [matchType, setMatchType] = useState<"singles" | "doubles">("doubles")
   const [maxPlayers, setMaxPlayers] = useState(8)
   const [selectedLevels, setSelectedLevels] = useState<SkillLevel[]>(["newbie", "beginner_plus"])
   const [shuffleMode, setShuffleMode] = useState(false)
+  const [title, setTitle] = useState("")
   const [description, setDescription] = useState("")
   const [minPrice, setMinPrice] = useState<number>(0)
   const [maxPrice, setMaxPrice] = useState<number>(0)
@@ -60,14 +66,35 @@ export function CreateMatchModal({ open, onOpenChange, onSuccess }: CreateMatchM
   const [newVenueAddress, setNewVenueAddress] = useState("")
   const [newVenueCity, setNewVenueCity] = useState("HCM")
   const [addingVenue, setAddingVenue] = useState(false)
+  const [detectedCity, setDetectedCity] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (!open) return
+    if (detectedCity !== null) return
+    if (!navigator.geolocation) return
+
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        const { latitude } = pos.coords
+        const city = latitude > 15 ? "HN" : "HCM"
+        setDetectedCity(city)
+        setNewVenueCity(city)
+      },
+      () => {
+        setDetectedCity("")
+      },
+      { timeout: 5000, maximumAge: 300000 },
+    )
+  }, [open, detectedCity])
 
   const loadVenues = useCallback((q?: string) => {
     setVenuesLoading(true)
-    fetchVenues({ q })
+    const city = detectedCity || undefined
+    fetchVenues({ q, city })
       .then((res) => setVenues(res.venues))
       .catch(() => {})
       .finally(() => setVenuesLoading(false))
-  }, [])
+  }, [detectedCity])
 
   useEffect(() => {
     if (open) loadVenues()
@@ -83,10 +110,17 @@ export function CreateMatchModal({ open, onOpenChange, onSuccess }: CreateMatchM
     if (!newVenueName.trim()) return
     setAddingVenue(true)
     try {
+      const geocodeQuery = newVenueAddress.trim()
+        ? `${newVenueName.trim()}, ${newVenueAddress.trim()}`
+        : `${newVenueName.trim()}, ${newVenueCity === "HCM" ? "Hồ Chí Minh" : "Hà Nội"}`
+      const coords = await forwardGeocode(geocodeQuery)
+
       const res = await createVenue({
         name: newVenueName.trim(),
         address: newVenueAddress.trim() || undefined,
         city: newVenueCity,
+        lat: coords?.lat,
+        lng: coords?.lng,
       })
       setVenues((prev) => [res.venue, ...prev])
       setSelectedVenue(res.venue)
@@ -140,6 +174,7 @@ export function CreateMatchModal({ open, onOpenChange, onSuccess }: CreateMatchM
         max_tier: maxTier,
         max_players: maxPlayers,
         courts: Array.from({ length: courtCount }, (_, i) => i + 1),
+        title: title.trim() || undefined,
         description: description || undefined,
         min_price: safeMin,
         max_price: safeMax,
@@ -170,6 +205,7 @@ export function CreateMatchModal({ open, onOpenChange, onSuccess }: CreateMatchM
     setMatchType("doubles")
     setMaxPlayers(8)
     setSelectedLevels(["newbie", "beginner_plus"])
+    setTitle("")
     setDescription("")
     setMinPrice(0)
     setMaxPrice(0)
@@ -177,10 +213,10 @@ export function CreateMatchModal({ open, onOpenChange, onSuccess }: CreateMatchM
     onOpenChange(false)
   }
 
-  // Generate next 7 days
+  const startOffset = new Date().getHours() >= 22 ? 1 : 0
   const dates = Array.from({ length: 7 }, (_, i) => {
     const date = new Date()
-    date.setDate(date.getDate() + i)
+    date.setDate(date.getDate() + startOffset + i)
     return date
   })
 
@@ -228,7 +264,24 @@ export function CreateMatchModal({ open, onOpenChange, onSuccess }: CreateMatchM
           {/* Step 1: Venue Selection */}
           {step === 1 && (
             <div className="space-y-4">
-              {/* Search */}
+              {/* City toggle + Search */}
+              <div className="flex items-center gap-2">
+                {["HCM", "HN", ""].map((c) => (
+                  <button
+                    key={c}
+                    type="button"
+                    onClick={() => { setDetectedCity(c); setVenueSearch("") }}
+                    className={cn(
+                      "px-3 py-1.5 rounded-full text-xs border transition-colors flex-shrink-0",
+                      detectedCity === c
+                        ? "bg-primary text-primary-foreground border-primary"
+                        : "bg-secondary border-border/40"
+                    )}
+                  >
+                    {c === "HCM" ? "TP.HCM" : c === "HN" ? "Hà Nội" : "Tất cả"}
+                  </button>
+                ))}
+              </div>
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                 <Input
@@ -621,6 +674,22 @@ export function CreateMatchModal({ open, onOpenChange, onSuccess }: CreateMatchM
                     Đã chọn: {selectedLevels.map(l => SKILL_LABELS[l]).join(", ")}
                   </p>
                 )}
+              </div>
+
+              {/* Title */}
+              <div>
+                <Label className="text-sm font-semibold mb-3 block flex items-center gap-2">
+                  <FileText className="w-4 h-4" />
+                  Tên trận đấu
+                  <span className="text-xs font-normal text-muted-foreground">(tuỳ chọn)</span>
+                </Label>
+                <Input
+                  value={title}
+                  onChange={(e) => setTitle(e.target.value)}
+                  maxLength={100}
+                  placeholder="VD: Giao lưu thứ 7 hàng tuần"
+                  className="rounded-xl"
+                />
               </div>
 
               {/* Description */}

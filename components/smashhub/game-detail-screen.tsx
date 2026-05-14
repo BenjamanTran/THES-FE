@@ -27,13 +27,16 @@ import {
   Share2,
   Check,
   Star,
+  Play,
+  Pencil,
+  Copy,
 } from "lucide-react"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog"
-import { SkillBadge } from "./skill-badge"
+import { SkillBadge, SKILL_LABELS, skillColors, type SkillLevel } from "./skill-badge"
 import { GenderIcon } from "./gender-icon"
 import { CreateMatchSheet } from "./create-match-sheet"
 import { ScoreEntryModal } from "./score-entry-modal"
@@ -42,12 +45,26 @@ import {
   joinGame,
   leaveGame,
   deleteMatch,
+  startMatch,
   promoteCoHost,
   kickPlayer,
+  ratePlayer,
   type GameDetail,
+  type GamePlayer,
   type MatchSummary,
   type FinishMatchResponse,
+  type Tier,
 } from "@/lib/api"
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
 import { useAuth, useRequireAuth } from "@/lib/auth-context"
 import { reverseGeocode } from "@/lib/geocode"
 import { formatPriceRange } from "@/lib/format"
@@ -88,20 +105,7 @@ function fitMeta(fit: GameDetail["fit_level"]) {
   }
 }
 
-const TIER_RANGES: Record<string, [number, number]> = {
-  newbie: [0, 399], beginner_plus: [400, 799], lower_intermediate: [800, 1199],
-  intermediate: [1200, 1499], upper_intermediate: [1500, 1799], advanced: [1800, 2099],
-  semi_pro: [2100, 2399], professional: [2400, 2800],
-}
-
-function ratingToStars(tier: string, rating: number): number {
-  const bounds = TIER_RANGES[tier] || [0, 399]
-  const [low, high] = bounds
-  const range = high - low
-  if (range === 0) return 1
-  const raw = Math.round(((rating - low) / range) * 4) + 1
-  return Math.max(1, Math.min(5, raw))
-}
+import { ratingToStars } from "@/lib/rating-stars"
 
 function avatarLabel(name: string | null) {
   if (!name) return "?"
@@ -124,7 +128,13 @@ export function GameDetailScreen({ gameId, onClose, onChanged }: GameDetailScree
   const [showCreateMatch, setShowCreateMatch] = useState(false)
   const [showCreateMatchAutoBalance, setShowCreateMatchAutoBalance] = useState(false)
   const [copiedLink, setCopiedLink] = useState(false)
+  const [copiedAddress, setCopiedAddress] = useState(false)
   const [finishingMatch, setFinishingMatch] = useState<MatchSummary | null>(null)
+  const [ratingPlayer, setRatingPlayer] = useState<GamePlayer | null>(null)
+  const [rateTier, setRateTier] = useState<Tier>("newbie")
+  const [rateStars, setRateStars] = useState(3)
+  const [rateNote, setRateNote] = useState("")
+  const [rateSaving, setRateSaving] = useState(false)
   const open = gameId !== null
 
   const loadGame = useCallback(
@@ -286,6 +296,21 @@ export function GameDetailScreen({ gameId, onClose, onChanged }: GameDetailScree
     onChanged?.()
   }
 
+  const [startingMatchId, setStartingMatchId] = useState<number | null>(null)
+  const handleStartMatch = async (matchId: number) => {
+    if (!game) return
+    setStartingMatchId(matchId)
+    try {
+      await startMatch(game.id, matchId)
+      loadGame(game.id)
+      onChanged?.()
+    } catch {
+      // silently ignore
+    } finally {
+      setStartingMatchId(null)
+    }
+  }
+
   const [deletingMatchId, setDeletingMatchId] = useState<number | null>(null)
   const handleDeleteMatch = async (matchId: number) => {
     if (!game) return
@@ -320,6 +345,32 @@ export function GameDetailScreen({ gameId, onClose, onChanged }: GameDetailScree
       onChanged?.()
     } catch {
       // silently ignore
+    }
+  }
+
+  const openRatingSheet = (player: GamePlayer) => {
+    setRatingPlayer(player)
+    setRateTier(player.host_rated_tier || player.rank?.tier || "newbie")
+    setRateStars(player.host_rated_stars ?? (player.rank ? ratingToStars(player.rank.tier, player.rank.rating) : 3))
+    setRateNote(player.host_rating_note || "")
+  }
+
+  const handleRatePlayer = async () => {
+    if (!game || !ratingPlayer) return
+    setRateSaving(true)
+    try {
+      await ratePlayer(game.id, {
+        user_id: ratingPlayer.id,
+        tier: rateTier,
+        stars: rateStars,
+        note: rateNote || undefined,
+      })
+      setRatingPlayer(null)
+      loadGame(game.id)
+    } catch {
+      // silently ignore
+    } finally {
+      setRateSaving(false)
     }
   }
 
@@ -395,7 +446,7 @@ export function GameDetailScreen({ gameId, onClose, onChanged }: GameDetailScree
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
                     <h1 className="font-bold text-lg leading-snug">
-                      {game.description || `Trận #${game.id}`}
+                      {game.title || `Game #${game.id} (${game.host?.name || "Host"})`}
                     </h1>
                     {game.host?.name && (
                       <div className="flex items-center gap-1.5 mt-1.5 text-xs text-muted-foreground">
@@ -438,7 +489,9 @@ export function GameDetailScreen({ gameId, onClose, onChanged }: GameDetailScree
 
               {(game.location || game.lat !== null || game.courts) && (
                 <Card className="p-4 rounded-2xl border-border/50">
-                  {(game.location || game.lat !== null) && (
+                  {(game.location || game.lat !== null) && (() => {
+                    const displayAddress = game.location || resolvedAddress || (game.lat != null ? `${game.lat}, ${game.lng}` : null)
+                    return (
                     <div className="flex items-start gap-3 text-sm">
                       <MapPin className="w-4 h-4 text-primary flex-shrink-0 mt-0.5" />
                       <div className="min-w-0 flex-1">
@@ -462,8 +515,23 @@ export function GameDetailScreen({ gameId, onClose, onChanged }: GameDetailScree
                           </p>
                         )}
                       </div>
+                      {displayAddress && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            navigator.clipboard.writeText(displayAddress)
+                            setCopiedAddress(true)
+                            setTimeout(() => setCopiedAddress(false), 2000)
+                          }}
+                          className="flex-shrink-0 p-1.5 rounded-lg text-muted-foreground hover:text-primary hover:bg-primary/10 transition-colors"
+                          title="Copy địa chỉ"
+                        >
+                          {copiedAddress ? <Check className="w-3.5 h-3.5 text-green-500" /> : <Copy className="w-3.5 h-3.5" />}
+                        </button>
+                      )}
                     </div>
-                  )}
+                    )
+                  })()}
                   {game.courts && game.courts.length > 0 && (
                     <div className="flex items-center gap-2 mt-3 flex-wrap">
                       <span className="text-xs text-muted-foreground">Sân:</span>
@@ -570,12 +638,28 @@ export function GameDetailScreen({ gameId, onClose, onChanged }: GameDetailScree
                             {isMe && <span className="text-xs text-muted-foreground"> (bạn)</span>}
                           </p>
                           <div className="flex items-center gap-1.5 mt-0.5">
-                            <SkillBadge level={player.rank?.tier ?? null} size="xs" compact />
-                            {player.rank && (
-                              <span className="flex items-center gap-0.5 text-[10px] text-amber-400">
-                                {ratingToStars(player.rank.tier, player.rank.rating)}
-                                <Star className="w-2.5 h-2.5 fill-amber-400 text-amber-400" />
-                              </span>
+                            <SkillBadge level={player.host_rated_tier || player.rank?.tier || null} size="xs" compact />
+                            {(() => {
+                              const tier = player.host_rated_tier || player.rank?.tier
+                              const stars = player.host_rated_tier
+                                ? player.host_rated_stars
+                                : player.rank ? ratingToStars(player.rank.tier, player.rank.rating) : null
+                              if (!tier || stars == null) return null
+                              return (
+                                <span className="flex items-center gap-0.5 text-[10px] text-amber-400">
+                                  {stars}<Star className="w-2.5 h-2.5 fill-amber-400 text-amber-400" />
+                                </span>
+                              )
+                            })()}
+                            {canManage && gameActive && (
+                              <button
+                                type="button"
+                                onClick={() => openRatingSheet(player)}
+                                className="p-0.5 rounded-full text-muted-foreground hover:text-primary hover:bg-primary/10 transition-colors"
+                                title="Đánh giá trình độ"
+                              >
+                                <Pencil className="w-3 h-3" />
+                              </button>
                             )}
                           </div>
                         </div>
@@ -696,15 +780,24 @@ export function GameDetailScreen({ gameId, onClose, onChanged }: GameDetailScree
                   ) : (
                     <div className="space-y-2">
                       {game.matches.map((match) => {
+                        const isPending = match.status === "pending"
+                        const isOngoing = match.status === "ongoing"
                         const isFinished = match.status === "finished"
-                        const canFinishThis = isParticipant && !isFinished
+                        const canFinishThis = isParticipant && isOngoing
+                        const statusBadge = isFinished
+                          ? { label: "Kết thúc", cls: "bg-neutral-500/20 text-neutral-300 border-neutral-500/30" }
+                          : isOngoing
+                            ? { label: "Đang chơi", cls: "bg-emerald-500/20 text-emerald-400 border-emerald-500/30" }
+                            : { label: "Chờ bắt đầu", cls: "bg-amber-500/20 text-amber-400 border-amber-500/30" }
                         return (
                           <div
                             key={match.id}
                             className={`p-3 rounded-xl border ${
                               isFinished
                                 ? "border-border/30 bg-secondary/30"
-                                : "border-primary/20 bg-primary/5"
+                                : isOngoing
+                                  ? "border-emerald-500/20 bg-emerald-500/5"
+                                  : "border-amber-500/20 bg-amber-500/5"
                             }`}
                           >
                             <div className="flex items-center justify-between mb-2">
@@ -714,16 +807,26 @@ export function GameDetailScreen({ gameId, onClose, onChanged }: GameDetailScree
                                 </span>
                                 <Badge
                                   variant="outline"
-                                  className={`text-[10px] px-1.5 py-0 rounded-full ${
-                                    isFinished
-                                      ? "bg-neutral-500/20 text-neutral-300 border-neutral-500/30"
-                                      : "bg-emerald-500/20 text-emerald-400 border-emerald-500/30"
-                                  }`}
+                                  className={`text-[10px] px-1.5 py-0 rounded-full ${statusBadge.cls}`}
                                 >
-                                  {isFinished ? "Kết thúc" : "Đang chơi"}
+                                  {statusBadge.label}
                                 </Badge>
                               </div>
                               <div className="flex items-center gap-1.5">
+                                {canManage && isPending && (
+                                  <Button
+                                    size="sm"
+                                    className="rounded-full text-xs h-7 px-3 bg-emerald-500 hover:bg-emerald-600 text-white"
+                                    onClick={() => handleStartMatch(match.id)}
+                                    disabled={startingMatchId === match.id}
+                                  >
+                                    {startingMatchId === match.id
+                                      ? <Loader2 className="w-3.5 h-3.5 mr-1 animate-spin" />
+                                      : <Play className="w-3.5 h-3.5 mr-1" />
+                                    }
+                                    Bắt đầu
+                                  </Button>
+                                )}
                                 {canFinishThis && (
                                   <Button
                                     size="sm"
@@ -755,11 +858,26 @@ export function GameDetailScreen({ gameId, onClose, onChanged }: GameDetailScree
                               <div className="flex-1">
                                 <p className="text-[10px] text-muted-foreground mb-0.5">Team A</p>
                                 <div className="flex flex-wrap gap-1">
-                                  {match.team_a.map((p) => (
-                                    <Badge key={p.id} variant="secondary" className="text-[10px] px-1.5 py-0">
-                                      {p.name || `#${p.id}`}
-                                    </Badge>
-                                  ))}
+                                  {match.team_a.map((p) => {
+                                    const gp = game.players.find((pl) => pl.id === p.id)
+                                    const displayTier = gp?.host_rated_tier || p.rank?.tier
+                                    const displayStars = gp?.host_rated_tier && gp?.host_rated_stars
+                                      ? gp.host_rated_stars
+                                      : p.rank ? ratingToStars(p.rank.tier, p.rank.rating) : null
+                                    const tc = displayTier ? skillColors[displayTier] || skillColors.newbie : null
+                                    return (
+                                      <div key={p.id} className="flex flex-col items-start">
+                                        <Badge variant="secondary" className="text-[10px] px-1.5 py-0 rounded-b-none">
+                                          {p.name || `#${p.id}`}
+                                        </Badge>
+                                        {displayTier && tc && (
+                                          <span className={`text-[9px] px-1.5 py-0 rounded-b-md ${tc.bg} ${tc.text} flex items-center gap-0.5 w-full`}>
+                                            {SKILL_LABELS[displayTier as SkillLevel]} {displayStars}<Star className="w-2 h-2 fill-current" />
+                                          </span>
+                                        )}
+                                      </div>
+                                    )
+                                  })}
                                 </div>
                               </div>
 
@@ -782,11 +900,26 @@ export function GameDetailScreen({ gameId, onClose, onChanged }: GameDetailScree
                               <div className="flex-1 text-right">
                                 <p className="text-[10px] text-muted-foreground mb-0.5">Team B</p>
                                 <div className="flex flex-wrap gap-1 justify-end">
-                                  {match.team_b.map((p) => (
-                                    <Badge key={p.id} variant="secondary" className="text-[10px] px-1.5 py-0">
-                                      {p.name || `#${p.id}`}
-                                    </Badge>
-                                  ))}
+                                  {match.team_b.map((p) => {
+                                    const gp = game.players.find((pl) => pl.id === p.id)
+                                    const displayTier = gp?.host_rated_tier || p.rank?.tier
+                                    const displayStars = gp?.host_rated_tier && gp?.host_rated_stars
+                                      ? gp.host_rated_stars
+                                      : p.rank ? ratingToStars(p.rank.tier, p.rank.rating) : null
+                                    const tc = displayTier ? skillColors[displayTier] || skillColors.newbie : null
+                                    return (
+                                      <div key={p.id} className="flex flex-col items-end">
+                                        <Badge variant="secondary" className="text-[10px] px-1.5 py-0 rounded-b-none">
+                                          {p.name || `#${p.id}`}
+                                        </Badge>
+                                        {displayTier && tc && (
+                                          <span className={`text-[9px] px-1.5 py-0 rounded-b-md ${tc.bg} ${tc.text} flex items-center gap-0.5 w-full justify-end`}>
+                                            {SKILL_LABELS[displayTier as SkillLevel]} {displayStars}<Star className="w-2 h-2 fill-current" />
+                                          </span>
+                                        )}
+                                      </div>
+                                    )
+                                  })}
                                 </div>
                               </div>
                             </div>
@@ -902,6 +1035,84 @@ export function GameDetailScreen({ gameId, onClose, onChanged }: GameDetailScree
           onFinished={handleMatchFinished}
         />
       )}
+
+      <Sheet open={!!ratingPlayer} onOpenChange={(v) => !v && setRatingPlayer(null)}>
+        <SheetContent side="bottom" className="rounded-t-3xl max-w-md mx-auto">
+          <SheetHeader>
+            <SheetTitle className="text-base">
+              Đánh giá trình độ – {ratingPlayer?.name || ""}
+            </SheetTitle>
+          </SheetHeader>
+          <div className="space-y-4 pt-4 pb-6">
+            {ratingPlayer?.rank && (
+              <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                <span>Tự khai:</span>
+                <SkillBadge level={ratingPlayer.rank.tier} size="xs" compact />
+                <span className="flex items-center gap-0.5 text-amber-400">
+                  {ratingToStars(ratingPlayer.rank.tier, ratingPlayer.rank.rating)}
+                  <Star className="w-2.5 h-2.5 fill-amber-400 text-amber-400" />
+                </span>
+              </div>
+            )}
+
+            <div className="space-y-1.5">
+              <Label className="text-xs">Trình độ thực tế</Label>
+              <Select value={rateTier} onValueChange={(v) => setRateTier(v as Tier)}>
+                <SelectTrigger className="rounded-xl">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {(Object.entries(SKILL_LABELS) as [SkillLevel, string][]).map(([key, label]) => (
+                    <SelectItem key={key} value={key}>{label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-1.5">
+              <Label className="text-xs">Số sao (1–5)</Label>
+              <div className="flex items-center gap-1">
+                {[1, 2, 3, 4, 5].map((s) => (
+                  <button
+                    key={s}
+                    type="button"
+                    onClick={() => setRateStars(s)}
+                    className="p-1 transition-colors"
+                  >
+                    <Star
+                      className={`w-6 h-6 ${
+                        s <= rateStars
+                          ? "fill-amber-400 text-amber-400"
+                          : "text-muted-foreground/40"
+                      }`}
+                    />
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="space-y-1.5">
+              <Label className="text-xs">Ghi chú (tuỳ chọn)</Label>
+              <Input
+                value={rateNote}
+                onChange={(e) => setRateNote(e.target.value)}
+                maxLength={200}
+                placeholder="VD: Chơi tốt hơn trình tự khai…"
+                className="rounded-xl text-sm"
+              />
+            </div>
+
+            <Button
+              className="w-full rounded-full"
+              onClick={handleRatePlayer}
+              disabled={rateSaving}
+            >
+              {rateSaving ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
+              Lưu đánh giá
+            </Button>
+          </div>
+        </SheetContent>
+      </Sheet>
     </Dialog>
   )
 }

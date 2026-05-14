@@ -229,7 +229,7 @@ export function MyGamesScreen({ onCreateMatch, onOpenGame }: MyGamesScreenProps)
         </div>
       </header>
 
-      <div className="flex-1 overflow-y-auto px-4 py-4">
+      <div className="flex-1 overflow-y-auto px-4 pt-4 pb-24">
         {loading ? (
           <div className="space-y-3 animate-skeleton">
             <div className="h-28 rounded-2xl bg-muted/30" />
@@ -274,7 +274,7 @@ export function MyGamesScreen({ onCreateMatch, onOpenGame }: MyGamesScreenProps)
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-2 mb-1 flex-wrap">
                         <h3 className="font-semibold text-sm truncate">
-                          {game.description || game.location || `Trận #${game.id}`}
+                          {game.title || `Game #${game.id} (${game.host?.name || "Host"})`}
                         </h3>
                         <Badge
                           variant="outline"

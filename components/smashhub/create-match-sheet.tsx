@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useMemo, useState } from "react"
-import { Loader2, Shuffle, Plus, X, AlertTriangle, RotateCcw } from "lucide-react"
+import { Loader2, Shuffle, Plus, X, AlertTriangle, RotateCcw, Star } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Card } from "@/components/ui/card"
@@ -13,8 +13,9 @@ import {
   SheetDescription,
 } from "@/components/ui/sheet"
 import { SkillBadge } from "./skill-badge"
+import { ratingToStars } from "@/lib/rating-stars"
 import { createMatch, type GamePlayer, type MatchSummary } from "@/lib/api"
-import { balanceTeams, calcFairness, hasWideSkillGap } from "@/lib/balance"
+import { balanceTeams, fillSlots, calcFairness, hasWideSkillGap } from "@/lib/balance"
 
 interface CreateMatchSheetProps {
   open: boolean
@@ -62,10 +63,32 @@ export function CreateMatchSheet({
   }, [matches])
 
   const teamSize = matchType === "singles" ? 1 : 2
+
+  const matchCounts = useMemo(() => {
+    const counts: Record<number, number> = {}
+    for (const p of players) counts[p.id] = playerStats[p.id]?.played ?? 0
+    return counts
+  }, [players, playerStats])
+
+  const inOngoingMatch = useMemo(() => {
+    const ids = new Set<number>()
+    for (const m of matches) {
+      if (m.status === "ongoing" || m.status === "pending") {
+        for (const p of [...(m.team_a || []), ...(m.team_b || [])]) ids.add(p.id)
+      }
+    }
+    return ids
+  }, [matches])
+
   const assigned = new Set([...teamA, ...teamB])
   const available = players
     .filter((p) => !assigned.has(p.id))
-    .sort((a, b) => (playerStats[a.id]?.played ?? 0) - (playerStats[b.id]?.played ?? 0))
+    .sort((a, b) => {
+      const aInMatch = inOngoingMatch.has(a.id) ? 1 : 0
+      const bInMatch = inOngoingMatch.has(b.id) ? 1 : 0
+      if (aInMatch !== bInMatch) return aInMatch - bInMatch
+      return (playerStats[a.id]?.played ?? 0) - (playerStats[b.id]?.played ?? 0)
+    })
 
   const addToTeam = (playerId: number, team: "a" | "b") => {
     if (team === "a" && teamA.length < teamSize) {
@@ -80,16 +103,22 @@ export function CreateMatchSheet({
     else setTeamB((prev) => prev.filter((id) => id !== playerId))
   }
 
-  const matchCounts = useMemo(() => {
-    const counts: Record<number, number> = {}
-    for (const p of players) counts[p.id] = playerStats[p.id]?.played ?? 0
-    return counts
-  }, [players, playerStats])
-
   const autoAssign = () => {
-    const result = balanceTeams(players, teamSize, matchCounts)
-    setTeamA(result.teamA)
-    setTeamB(result.teamB)
+    const hasPartial = teamA.length > 0 || teamB.length > 0
+    const isFull = teamA.length >= teamSize && teamB.length >= teamSize
+
+    if (isFull || !hasPartial) {
+      const eligible = players.filter((p) => !inOngoingMatch.has(p.id))
+      const result = balanceTeams(eligible.length >= teamSize * 2 ? eligible : players, teamSize, matchCounts)
+      setTeamA(result.teamA)
+      setTeamB(result.teamB)
+    } else {
+      const locked = new Set([...teamA, ...teamB])
+      const candidates = players.filter((p) => !locked.has(p.id) && !inOngoingMatch.has(p.id))
+      const result = fillSlots(teamA, teamB, teamSize, candidates, players, matchCounts)
+      setTeamA(result.teamA)
+      setTeamB(result.teamB)
+    }
   }
 
   const fairness = useMemo(() => {
@@ -224,8 +253,10 @@ export function CreateMatchSheet({
             <div>
               <p className="text-xs text-muted-foreground mb-2">Chọn người chơi:</p>
               <div className="space-y-2">
-                {available.map((p) => (
-                  <div key={p.id} className="flex items-center gap-2">
+                {available.map((p) => {
+                  const busy = inOngoingMatch.has(p.id)
+                  return (
+                  <div key={p.id} className={`flex items-center gap-2 ${busy ? "opacity-40" : ""}`}>
                     <Button
                       size="sm"
                       variant="outline"
@@ -237,8 +268,21 @@ export function CreateMatchSheet({
                     </Button>
                     <div className="flex-1 min-w-0 flex items-center gap-1.5">
                       <span className="text-xs font-medium truncate">{p.name || `#${p.id}`}</span>
-                      <SkillBadge level={p.rank?.tier ?? null} size="xs" compact />
+                      <SkillBadge level={p.host_rated_tier || p.rank?.tier || null} size="xs" compact />
                       {(() => {
+                        const stars = p.host_rated_tier && p.host_rated_stars
+                          ? p.host_rated_stars
+                          : p.rank ? ratingToStars(p.rank.tier, p.rank.rating) : null
+                        if (stars == null) return null
+                        return (
+                          <span className="flex items-center gap-0.5 text-[10px] text-amber-400">
+                            {stars}<Star className="w-2.5 h-2.5 fill-amber-400 text-amber-400" />
+                          </span>
+                        )
+                      })()}
+                      {busy ? (
+                        <span className="text-[10px] text-orange-400 font-medium">đang chơi</span>
+                      ) : (() => {
                         const s = playerStats[p.id]
                         const played = s?.played || 0
                         return (
@@ -260,7 +304,8 @@ export function CreateMatchSheet({
                       → B
                     </Button>
                   </div>
-                ))}
+                  )
+                })}
               </div>
             </div>
           )}
@@ -309,9 +354,20 @@ function TeamColumn({
           const p = players.find((pl) => pl.id === id)
           return (
             <div key={id} className="flex items-center justify-between gap-1">
-              <div className="flex items-center gap-1 min-w-0">
-                <span className="text-xs truncate">{p?.name || `#${id}`}</span>
-                <SkillBadge level={p?.rank?.tier ?? null} size="xs" compact showIcon={false} />
+              <div className="flex items-center gap-1 min-w-0 flex-wrap">
+                <span className="text-xs">{p?.name || `#${id}`}</span>
+                <SkillBadge level={p?.host_rated_tier || p?.rank?.tier || null} size="xs" compact showIcon={false} />
+                {(() => {
+                  const stars = p?.host_rated_tier && p?.host_rated_stars
+                    ? p.host_rated_stars
+                    : p?.rank ? ratingToStars(p.rank.tier, p.rank.rating) : null
+                  if (stars == null) return null
+                  return (
+                    <span className="flex items-center gap-0.5 text-[9px] text-amber-400">
+                      {stars}<Star className="w-2 h-2 fill-amber-400 text-amber-400" />
+                    </span>
+                  )
+                })()}
               </div>
               <button type="button" onClick={() => onRemove(id)} className="text-muted-foreground hover:text-destructive flex-shrink-0">
                 <X className="w-3 h-3" />

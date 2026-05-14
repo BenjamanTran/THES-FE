@@ -1,4 +1,5 @@
 import type { GamePlayer } from "./api"
+import { ratingFromTierAndStars } from "./rating-stars"
 
 const DEFAULT_RATING = 600
 
@@ -17,6 +18,9 @@ export interface BalanceResult {
 }
 
 function getRating(player: GamePlayer): number {
+  if (player.host_rated_tier && player.host_rated_stars) {
+    return ratingFromTierAndStars(player.host_rated_tier, player.host_rated_stars)
+  }
   return player.rank?.rating ?? DEFAULT_RATING
 }
 
@@ -190,6 +194,101 @@ const TIER_ORDER: Record<string, number> = {
   advanced: 5,
   semi_pro: 6,
   professional: 7,
+}
+
+/**
+ * Fill empty slots in partially-assigned teams.
+ * Keeps existing members, picks candidate(s) with fewest matches played,
+ * then among those picks the one(s) that best balance the two teams by rating.
+ */
+export function fillSlots(
+  teamA: number[],
+  teamB: number[],
+  teamSize: number,
+  candidates: GamePlayer[],
+  allPlayers: GamePlayer[],
+  matchCounts?: Record<number, number>,
+): BalanceResult {
+  const slotsA = teamSize - teamA.length
+  const slotsB = teamSize - teamB.length
+  const totalSlots = slotsA + slotsB
+  if (totalSlots === 0) return { teamA: [...teamA], teamB: [...teamB] }
+  if (candidates.length === 0) return { teamA: [...teamA], teamB: [...teamB] }
+
+  const pool = matchCounts
+    ? selectByFewestMatches(candidates, Math.max(totalSlots, Math.min(candidates.length, totalSlots + 4)), matchCounts)
+    : candidates
+
+  const ratingMap = new Map(allPlayers.map((p) => [p.id, getRating(p)]))
+  const candidateIds = pool.map((c) => c.id)
+
+  const pickCombos = combinations(candidateIds, Math.min(totalSlots, candidateIds.length))
+
+  let bestA = [...teamA]
+  let bestB = [...teamB]
+  let bestDiff = Infinity
+  let bestMatchSum = Infinity
+
+  for (const picked of pickCombos) {
+    const mcSum = matchCounts ? picked.reduce((s, id) => s + (matchCounts[id] ?? 0), 0) : 0
+
+    if (mcSum > bestMatchSum) continue
+
+    let newA: number[]
+    let newB: number[]
+
+    if (slotsA === 0) {
+      newA = [...teamA]
+      newB = [...teamB, ...picked.slice(0, slotsB)]
+    } else if (slotsB === 0) {
+      newA = [...teamA, ...picked.slice(0, slotsA)]
+      newB = [...teamB]
+    } else {
+      const best = findBestAssignment(teamA, teamB, picked, slotsA, slotsB, ratingMap)
+      newA = best.a
+      newB = best.b
+    }
+
+    const sumA = bestSumFor(newA, ratingMap)
+    const sumB = bestSumFor(newB, ratingMap)
+    const diff = Math.abs(sumA - sumB)
+
+    if (mcSum < bestMatchSum || (mcSum === bestMatchSum && diff < bestDiff)) {
+      bestMatchSum = mcSum
+      bestDiff = diff
+      bestA = newA
+      bestB = newB
+    }
+  }
+
+  return { teamA: bestA, teamB: bestB }
+}
+
+function findBestAssignment(
+  teamA: number[], teamB: number[], picked: number[],
+  slotsA: number, slotsB: number,
+  ratingMap: Map<number, number>,
+): { a: number[]; b: number[] } {
+  const assignCombos = combinations(picked, slotsA)
+  let bestA = [...teamA]
+  let bestB = [...teamB]
+  let bestDiff = Infinity
+
+  for (const forA of assignCombos) {
+    const forASet = new Set(forA)
+    const forB = picked.filter((id) => !forASet.has(id)).slice(0, slotsB)
+    if (forB.length < slotsB) continue
+    const newA = [...teamA, ...forA]
+    const newB = [...teamB, ...forB]
+    const diff = Math.abs(bestSumFor(newA, ratingMap) - bestSumFor(newB, ratingMap))
+    if (diff < bestDiff) { bestDiff = diff; bestA = newA; bestB = newB }
+  }
+
+  return { a: bestA, b: bestB }
+}
+
+function bestSumFor(ids: number[], ratingMap: Map<number, number>): number {
+  return ids.reduce((s, id) => s + (ratingMap.get(id) ?? DEFAULT_RATING), 0)
 }
 
 export function hasWideSkillGap(players: GamePlayer[]): boolean {

@@ -6,6 +6,27 @@ function cacheKey(lat: number, lng: number) {
   return `${lat.toFixed(5)},${lng.toFixed(5)}`;
 }
 
+export async function forwardGeocode(
+  query: string,
+  country = 'vn',
+): Promise<{ lat: number; lng: number } | null> {
+  const token = process.env.NEXT_PUBLIC_MAPBOX_TOKEN;
+  if (!token || !query.trim()) return null;
+
+  const url = `${MAPBOX_GEOCODE_URL}/${encodeURIComponent(query)}.json?access_token=${token}&language=vi&limit=1&country=${country}&types=poi,address,neighborhood,locality,place`;
+
+  try {
+    const res = await fetch(url);
+    if (!res.ok) return null;
+    const data = await res.json();
+    const coords = data?.features?.[0]?.center;
+    if (!coords || coords.length < 2) return null;
+    return { lng: coords[0], lat: coords[1] };
+  } catch {
+    return null;
+  }
+}
+
 export async function reverseGeocode(
   lat: number,
   lng: number,

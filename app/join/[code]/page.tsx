@@ -115,9 +115,7 @@ export default function JoinPage({ params }: { params: Promise<{ code: string }>
     <main className="min-h-[100dvh] flex items-center justify-center px-4 py-8 bg-background">
       <Card className="w-full max-w-sm rounded-3xl border-border/50 p-6">
         <div className="flex items-center gap-3 mb-5">
-          <div className="w-12 h-12 rounded-2xl bg-primary flex items-center justify-center text-2xl">
-            🏸
-          </div>
+          <img src="/logo.webp" alt="SmashHub" className="w-12 h-12 rounded-2xl" />
           <div>
             <h1 className="text-xl font-bold">SmashHub</h1>
             <p className="text-xs text-muted-foreground">Bạn được mời tham gia trận</p>

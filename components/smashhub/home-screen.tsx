@@ -225,7 +225,7 @@ export function HomeScreen({ onCreateMatch, onNavigate, onOpenGame }: HomeScreen
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 mb-1">
                         <h3 className="font-semibold text-sm truncate">
-                          {game.description || game.location || `Trận #${game.id}`}
+                          {game.title || `Game #${game.id} (${game.host?.name || "Host"})`}
                         </h3>
                         {isHost && (
                           <Badge className="bg-primary/20 text-primary border-0 text-[10px] px-1.5 py-0">

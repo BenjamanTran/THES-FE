@@ -31,7 +31,7 @@ interface SkillBadgeProps {
   compact?: boolean
 }
 
-const skillColors: Record<string, { bg: string; text: string; border: string }> = {
+export const skillColors: Record<string, { bg: string; text: string; border: string }> = {
   newbie: { bg: "bg-gray-500/20", text: "text-gray-400", border: "border-gray-500/30" },
   beginner_plus: { bg: "bg-green-500/20", text: "text-green-400", border: "border-green-500/30" },
   lower_intermediate: { bg: "bg-blue-500/20", text: "text-blue-400", border: "border-blue-500/30" },

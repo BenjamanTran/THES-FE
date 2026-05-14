@@ -20,6 +20,21 @@ export default function SmashHubPro() {
   const [showCreateMatch, setShowCreateMatch] = useState(false)
   const [selectedGameId, setSelectedGameId] = useState<number | null>(null)
   const [refreshKey, setRefreshKey] = useState(0)
+  const [transitioning, setTransitioning] = useState(false)
+  const [displayTab, setDisplayTab] = useState<AppTab>(activeTab)
+  const prevTab = useRef(activeTab)
+
+  useEffect(() => {
+    if (activeTab !== prevTab.current) {
+      setTransitioning(true)
+      const t = setTimeout(() => {
+        setDisplayTab(activeTab)
+        prevTab.current = activeTab
+        setTransitioning(false)
+      }, 120)
+      return () => clearTimeout(t)
+    }
+  }, [activeTab])
 
   const openGameDetail = (id: number) => setSelectedGameId(id)
   const closeGameDetail = () => setSelectedGameId(null)
@@ -39,22 +54,6 @@ export default function SmashHubPro() {
       </div>
     )
   }
-
-  const [transitioning, setTransitioning] = useState(false)
-  const [displayTab, setDisplayTab] = useState<AppTab>(activeTab)
-  const prevTab = useRef(activeTab)
-
-  useEffect(() => {
-    if (activeTab !== prevTab.current) {
-      setTransitioning(true)
-      const t = setTimeout(() => {
-        setDisplayTab(activeTab)
-        prevTab.current = activeTab
-        setTransitioning(false)
-      }, 120)
-      return () => clearTimeout(t)
-    }
-  }, [activeTab])
 
   const renderScreen = () => {
     switch (displayTab) {

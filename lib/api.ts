@@ -54,6 +54,7 @@ export interface Game {
   lat: number | null;
   lng: number | null;
   location: string | null;
+  title: string | null;
   description: string | null;
   courts: number[] | null;
   min_tier: string | null;
@@ -75,11 +76,15 @@ export interface GamePlayer {
   gender?: Gender;
   rank?: PlayerRank | null;
   role?: 'player' | 'co_host';
+  host_rated_tier?: Tier | null;
+  host_rated_stars?: number | null;
+  host_rating_note?: string | null;
 }
 
 export interface MatchPlayer {
   id: number;
   name: string | null;
+  rank?: PlayerRank | null;
 }
 
 export interface MatchSummary {
@@ -152,6 +157,7 @@ export interface CreateGameParams {
   max_tier?: string;
   max_players: number;
   courts?: number[];
+  title?: string;
   description?: string;
   min_price?: number;
   max_price?: number;
@@ -252,6 +258,10 @@ export function createMatch(gameId: number, params: CreateMatchParams) {
   });
 }
 
+export function startMatch(gameId: number, matchId: number) {
+  return request<MatchDetail>(`/api/v1/games/${gameId}/matches/${matchId}/start`, { method: 'POST' });
+}
+
 export function finishMatch(gameId: number, matchId: number, params?: FinishMatchParams) {
   return request<FinishMatchResponse>(`/api/v1/games/${gameId}/matches/${matchId}/finish`, {
     method: 'POST',
@@ -278,6 +288,13 @@ export function kickPlayer(gameId: number, userId: number) {
   return request<{ status: 'kicked'; user_id: number }>(`/api/v1/games/${gameId}/kick`, {
     method: 'POST',
     body: JSON.stringify({ user_id: userId }),
+  });
+}
+
+export function ratePlayer(gameId: number, params: { user_id: number; tier: Tier; stars: number; note?: string }) {
+  return request<GamePlayer>(`/api/v1/games/${gameId}/rate_player`, {
+    method: 'PATCH',
+    body: JSON.stringify(params),
   });
 }
 

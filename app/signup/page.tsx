@@ -52,9 +52,7 @@ export default function SignupPage() {
     <main className="min-h-[100dvh] flex items-center justify-center px-4 py-8 bg-background">
       <Card className="w-full max-w-sm rounded-3xl border-border/50 p-6">
         <div className="flex items-center gap-3 mb-6">
-          <div className="w-12 h-12 rounded-2xl bg-primary flex items-center justify-center text-2xl">
-            🏸
-          </div>
+          <img src="/logo.webp" alt="SmashHub" className="w-12 h-12 rounded-2xl" />
           <div>
             <h1 className="text-xl font-bold">Tạo tài khoản</h1>
             <p className="text-xs text-muted-foreground">Tham gia cộng đồng cầu lông</p>

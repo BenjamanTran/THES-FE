@@ -477,7 +477,7 @@ export function MatchesScreen({ onCreateMatch, onOpenGame }: MatchesScreenProps)
         )}
       </header>
 
-      <div className="flex-1 overflow-y-auto px-4 py-4">
+      <div className="flex-1 overflow-y-auto px-4 pt-4 pb-24">
         {loading ? (
           <div className="space-y-3 animate-skeleton">
             <div className="h-28 rounded-2xl bg-muted/30" />
@@ -519,7 +519,7 @@ export function MatchesScreen({ onCreateMatch, onOpenGame }: MatchesScreenProps)
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-2 mb-1">
                         <h3 className="font-semibold text-sm truncate">
-                          {game.description || game.location || `Trận #${game.id}`}
+                          {game.title || `Game #${game.id} (${game.host?.name || "Host"})`}
                         </h3>
                         {isHost && (
                           <Badge className="bg-primary/20 text-primary border-0 text-[10px] px-1.5 py-0">
