@@ -1,0 +1,21 @@
+{
+  "name": "SmashHub Pro",
+  "short_name": "SmashHub",
+  "description": "The Ultimate Badminton Ecosystem",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#353535",
+  "theme_color": "#353535",
+  "icons": [
+    {
+      "src": "/icon-192.webp",
+      "sizes": "192x192",
+      "type": "image/webp"
+    },
+    {
+      "src": "/icon-512.webp",
+      "sizes": "512x512",
+      "type": "image/webp"
+    }
+  ]
+}

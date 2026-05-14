@@ -48,9 +48,7 @@ export function DesktopSidebar({ activeTab, onTabChange, onCreateMatch }: Deskto
       {/* Logo */}
       <div className="p-6 border-b border-neutral-800">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-2xl bg-primary flex items-center justify-center">
-            <span className="text-xl">🏸</span>
-          </div>
+          <img src="/logo.webp" alt="SmashHub" className="w-10 h-10 rounded-2xl" />
           <div>
             <h1 className="font-bold text-foreground">SmashHub</h1>
             <p className="text-xs text-primary">Pro Edition</p>

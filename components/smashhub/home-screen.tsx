@@ -2,12 +2,13 @@
 
 import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
-import { Bell, Search, MapPin, Users, Clock, ChevronRight, Zap, Loader2 } from "lucide-react"
+import { Bell, Search, MapPin, Users, Clock, ChevronRight, Zap, Loader2, Swords } from "lucide-react"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { SkillBadge } from "./skill-badge"
+import { GenderIcon } from "./gender-icon"
 import { fetchMyGames, type Game } from "@/lib/api"
 import { useAuth } from "@/lib/auth-context"
 import { MockSection } from "./mock-section"
@@ -175,8 +176,9 @@ export function HomeScreen({ onCreateMatch, onNavigate, onOpenGame }: HomeScreen
         </div>
 
         {loading ? (
-          <div className="flex items-center justify-center py-8">
-            <Loader2 className="w-5 h-5 animate-spin text-primary" />
+          <div className="space-y-3 animate-skeleton">
+            <div className="h-24 rounded-2xl bg-muted/30" />
+            <div className="h-24 rounded-2xl bg-muted/30" />
           </div>
         ) : !user ? (
           <Card className="p-6 rounded-2xl border-border/50 text-center">
@@ -209,7 +211,7 @@ export function HomeScreen({ onCreateMatch, onNavigate, onOpenGame }: HomeScreen
             </Button>
           </Card>
         ) : (
-          <div className="flex flex-col gap-3">
+          <div className="flex flex-col gap-3 animate-stagger">
             {games.map((game) => {
               const { date, time } = formatGameTime(game)
               const isHost = game.host?.id === user?.id
@@ -223,7 +225,7 @@ export function HomeScreen({ onCreateMatch, onNavigate, onOpenGame }: HomeScreen
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 mb-1">
                         <h3 className="font-semibold text-sm truncate">
-                          {game.description || game.location || `Trận #${game.id}`}
+                          {game.title || `Game #${game.id} (${game.host?.name || "Host"})`}
                         </h3>
                         {isHost && (
                           <Badge className="bg-primary/20 text-primary border-0 text-[10px] px-1.5 py-0">
@@ -252,6 +254,15 @@ export function HomeScreen({ onCreateMatch, onNavigate, onOpenGame }: HomeScreen
                         <Badge variant="outline" className="text-[10px] px-1.5 py-0">
                           {game.match_type === "singles" ? "Đơn" : "Đôi"}
                         </Badge>
+                        {(game.matches_count ?? 0) > 0 && (
+                          <Badge
+                            variant="outline"
+                            className="text-[10px] px-1.5 py-0 flex items-center gap-0.5"
+                          >
+                            <Swords className="w-2.5 h-2.5" />
+                            {game.matches_finished ?? 0}/{game.matches_count} trận
+                          </Badge>
+                        )}
                       </div>
                     </div>
                     <div className="flex flex-col items-end gap-2 ml-3">

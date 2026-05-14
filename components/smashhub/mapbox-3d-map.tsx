@@ -32,7 +32,9 @@ function radiusFromZoom(zoom: number): number {
   return 50;
 }
 
-const DEFAULT_CENTER: [number, number] = [106.6601, 10.7626]; // HCM
+const HCM_CENTER: [number, number] = [106.6601, 10.7626];
+const HN_CENTER: [number, number] = [105.8342, 21.0278];
+const CITY_CENTERS: Record<string, [number, number]> = { HCM: HCM_CENTER, HN: HN_CENTER };
 
 interface GameGroup {
   key: string;
@@ -46,10 +48,11 @@ function groupKey(lat: number, lng: number): string {
 }
 
 interface Mapbox3DMapProps {
+  city?: 'HCM' | 'HN';
   onOpenGame?: (id: number) => void;
 }
 
-export function Mapbox3DMap({ onOpenGame }: Mapbox3DMapProps = {}) {
+export function Mapbox3DMap({ city = 'HCM', onOpenGame }: Mapbox3DMapProps = {}) {
   const mapContainer = useRef<HTMLDivElement>(null);
   const map = useRef<mapboxgl.Map | null>(null);
   const [games, setGames] = useState<Game[]>([]);
@@ -224,11 +227,11 @@ export function Mapbox3DMap({ onOpenGame }: Mapbox3DMapProps = {}) {
         },
         () => {
           if (cancelled) return;
-          initMap(DEFAULT_CENTER);
+          initMap(CITY_CENTERS[city] || HCM_CENTER);
         }
       );
     } else {
-      initMap(DEFAULT_CENTER);
+      initMap(CITY_CENTERS[city] || HCM_CENTER);
     }
 
     return () => {
@@ -244,6 +247,15 @@ export function Mapbox3DMap({ onOpenGame }: Mapbox3DMapProps = {}) {
       setMapReady(false);
     };
   }, [pitch, showTerrain, showBuildings, loadGamesInView]);
+
+  const prevCity = useRef(city);
+  useEffect(() => {
+    if (city === prevCity.current) return;
+    prevCity.current = city;
+    if (!map.current) return;
+    const center = CITY_CENTERS[city] || HCM_CENTER;
+    map.current.flyTo({ center, zoom: 13, duration: 1500 });
+  }, [city]);
 
   const groups = useMemo<GameGroup[]>(() => {
     const map = new Map<string, GameGroup>();

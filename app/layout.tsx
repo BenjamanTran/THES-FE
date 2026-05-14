@@ -16,21 +16,12 @@ export const metadata: Metadata = {
   generator: 'v0.app',
   icons: {
     icon: [
-      {
-        url: '/icon-light-32x32.png',
-        media: '(prefers-color-scheme: light)',
-      },
-      {
-        url: '/icon-dark-32x32.png',
-        media: '(prefers-color-scheme: dark)',
-      },
-      {
-        url: '/icon.svg',
-        type: 'image/svg+xml',
-      },
+      { url: '/icon-48.webp', sizes: '48x48', type: 'image/webp' },
+      { url: '/icon-32.webp', sizes: '32x32', type: 'image/webp' },
     ],
-    apple: '/apple-icon.png',
+    apple: '/icon-180.webp',
   },
+  manifest: '/manifest.json',
 }
 
 export const viewport: Viewport = {

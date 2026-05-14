@@ -13,6 +13,7 @@ import {
   Locate,
   X,
   Wallet,
+  Swords,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
@@ -27,6 +28,7 @@ import {
   SheetTrigger,
 } from "@/components/ui/sheet"
 import { SkillBadge, SKILL_LABELS, type SkillLevel } from "./skill-badge"
+import { GenderIcon } from "./gender-icon"
 import { fetchGamesSearch, type Game } from "@/lib/api"
 import { useAuth } from "@/lib/auth-context"
 import { useGeolocation } from "@/hooks/use-geolocation"
@@ -475,10 +477,12 @@ export function MatchesScreen({ onCreateMatch, onOpenGame }: MatchesScreenProps)
         )}
       </header>
 
-      <div className="flex-1 overflow-y-auto px-4 py-4">
+      <div className="flex-1 overflow-y-auto px-4 pt-4 pb-24">
         {loading ? (
-          <div className="flex items-center justify-center py-16">
-            <Loader2 className="w-6 h-6 animate-spin text-primary" />
+          <div className="space-y-3 animate-skeleton">
+            <div className="h-28 rounded-2xl bg-muted/30" />
+            <div className="h-28 rounded-2xl bg-muted/30" />
+            <div className="h-28 rounded-2xl bg-muted/30" />
           </div>
         ) : error ? (
           <div className="text-center py-12">
@@ -501,7 +505,7 @@ export function MatchesScreen({ onCreateMatch, onOpenGame }: MatchesScreenProps)
             </Button>
           </div>
         ) : (
-          <div className="space-y-3">
+          <div className="space-y-3 animate-stagger">
             {games.map((game) => {
               const { date, time } = formatTime(game)
               const isHost = game.host?.id === user?.id
@@ -515,7 +519,7 @@ export function MatchesScreen({ onCreateMatch, onOpenGame }: MatchesScreenProps)
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-2 mb-1">
                         <h3 className="font-semibold text-sm truncate">
-                          {game.description || game.location || `Trận #${game.id}`}
+                          {game.title || `Game #${game.id} (${game.host?.name || "Host"})`}
                         </h3>
                         {isHost && (
                           <Badge className="bg-primary/20 text-primary border-0 text-[10px] px-1.5 py-0">
@@ -549,6 +553,15 @@ export function MatchesScreen({ onCreateMatch, onOpenGame }: MatchesScreenProps)
                         {game.fit_level === "good" && (
                           <Badge className="bg-emerald-500/20 text-emerald-400 border-0 text-[10px] px-1.5 py-0">
                             Phù hợp
+                          </Badge>
+                        )}
+                        {(game.matches_count ?? 0) > 0 && (
+                          <Badge
+                            variant="outline"
+                            className="text-[10px] px-1.5 py-0 flex items-center gap-0.5"
+                          >
+                            <Swords className="w-2.5 h-2.5" />
+                            {game.matches_finished ?? 0}/{game.matches_count} trận
                           </Badge>
                         )}
                         {(game.min_price > 0 || game.max_price > 0) && (
