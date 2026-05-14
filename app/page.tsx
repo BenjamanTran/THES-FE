@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useRef, useEffect } from "react"
 import { Loader2 } from "lucide-react"
 import { BottomNav, type AppTab } from "@/components/smashhub/bottom-nav"
 import { DesktopSidebar } from "@/components/smashhub/desktop-sidebar"
@@ -32,14 +32,32 @@ export default function SmashHubPro() {
 
   if (loading) {
     return (
-      <div className="min-h-[100dvh] flex items-center justify-center bg-background">
-        <Loader2 className="w-6 h-6 animate-spin text-primary" />
+      <div className="min-h-[100dvh] bg-background px-4 pt-16 space-y-4 animate-skeleton">
+        <div className="h-14 rounded-2xl bg-muted/30" />
+        <div className="h-32 rounded-2xl bg-muted/30" />
+        <div className="h-48 rounded-2xl bg-muted/30" />
       </div>
     )
   }
 
+  const [transitioning, setTransitioning] = useState(false)
+  const [displayTab, setDisplayTab] = useState<AppTab>(activeTab)
+  const prevTab = useRef(activeTab)
+
+  useEffect(() => {
+    if (activeTab !== prevTab.current) {
+      setTransitioning(true)
+      const t = setTimeout(() => {
+        setDisplayTab(activeTab)
+        prevTab.current = activeTab
+        setTransitioning(false)
+      }, 120)
+      return () => clearTimeout(t)
+    }
+  }, [activeTab])
+
   const renderScreen = () => {
-    switch (activeTab) {
+    switch (displayTab) {
       case "home":
         return (
           <HomeScreen
@@ -77,7 +95,12 @@ export default function SmashHubPro() {
       {/* Mobile Layout */}
       <div className="lg:hidden min-h-screen bg-background relative overflow-hidden">
         <main className="h-[100dvh] overflow-y-auto pb-24">
-          {renderScreen()}
+          <div
+            className="transition-opacity duration-150 ease-out h-full"
+            style={{ opacity: transitioning ? 0 : 1 }}
+          >
+            {renderScreen()}
+          </div>
         </main>
         <BottomNav activeTab={activeTab} onTabChange={setActiveTab} />
       </div>
@@ -99,7 +122,12 @@ export default function SmashHubPro() {
             <div className="relative w-[390px] h-[844px] bg-background rounded-[3rem] border-[14px] border-neutral-800 shadow-2xl shadow-black/50 overflow-hidden">
               {/* Screen Content */}
               <div className="h-full overflow-y-auto">
-                {renderScreen()}
+                <div
+                  className="transition-opacity duration-150 ease-out h-full"
+                  style={{ opacity: transitioning ? 0 : 1 }}
+                >
+                  {renderScreen()}
+                </div>
               </div>
             </div>
             

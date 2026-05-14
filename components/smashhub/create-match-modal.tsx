@@ -1,7 +1,7 @@
 "use client"
 
-import { useState } from "react"
-import { X, MapPin, Calendar, Clock, Users, Shuffle, ChevronRight, Check, Minus, Plus, Search, Swords, Loader2, FileText, Wallet } from "lucide-react"
+import { useState, useEffect, useCallback } from "react"
+import { X, MapPin, Calendar, Clock, Users, Shuffle, ChevronRight, Check, Minus, Plus, Search, Swords, Loader2, FileText, Wallet, PlusCircle, BadgeCheck } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
@@ -10,7 +10,7 @@ import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
 import { cn } from "@/lib/utils"
 import { SkillBadge, SKILL_LABELS, type SkillLevel } from "./skill-badge"
-import { createGame, type Game } from "@/lib/api"
+import { createGame, fetchVenues, createVenue, type Game, type Venue } from "@/lib/api"
 import { formatPriceRange } from "@/lib/format"
 
 interface CreateMatchModalProps {
@@ -30,14 +30,6 @@ const skillLevels: SkillLevel[] = [
   "professional",
 ]
 
-const venues = [
-  { id: 1, name: "Nhà thi đấu Phú Thọ", address: "Quận 11, TP.HCM", courts: 12, lat: 10.7626, lng: 106.6601 },
-  { id: 2, name: "CLB Cầu Lông Tân Bình", address: "Quận Tân Bình, TP.HCM", courts: 8, lat: 10.8012, lng: 106.6384 },
-  { id: 3, name: "Galaxy Badminton", address: "Quận 7, TP.HCM", courts: 8, lat: 10.7300, lng: 106.7200 },
-  { id: 4, name: "Victory Sports", address: "Quận Bình Thạnh, TP.HCM", courts: 12, lat: 10.8105, lng: 106.7091 },
-  { id: 5, name: "Pro Badminton Center", address: "Quận 1, TP.HCM", courts: 6, lat: 10.7769, lng: 106.7009 },
-]
-
 const timeSlots = [
   "06:00", "07:00", "08:00", "09:00", "10:00", "11:00",
   "14:00", "15:00", "16:00", "17:00", "18:00", "19:00", "20:00", "21:00", "22:00",
@@ -45,8 +37,8 @@ const timeSlots = [
 
 export function CreateMatchModal({ open, onOpenChange, onSuccess }: CreateMatchModalProps) {
   const [step, setStep] = useState(1)
-  const [selectedVenue, setSelectedVenue] = useState<typeof venues[0] | null>(null)
-  const [selectedCourts, setSelectedCourts] = useState<number[]>([1])
+  const [selectedVenue, setSelectedVenue] = useState<Venue | null>(null)
+  const [courtCount, setCourtCount] = useState(1)
   const [selectedDate, setSelectedDate] = useState<Date>(new Date())
   const [selectedTime, setSelectedTime] = useState<string>("18:00")
   const [duration, setDuration] = useState(2)
@@ -61,24 +53,60 @@ export function CreateMatchModal({ open, onOpenChange, onSuccess }: CreateMatchM
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  const filteredVenues = venues.filter(v => 
-    v.name.toLowerCase().includes(venueSearch.toLowerCase()) ||
-    v.address.toLowerCase().includes(venueSearch.toLowerCase())
-  )
+  const [venues, setVenues] = useState<Venue[]>([])
+  const [venuesLoading, setVenuesLoading] = useState(false)
+  const [showAddVenue, setShowAddVenue] = useState(false)
+  const [newVenueName, setNewVenueName] = useState("")
+  const [newVenueAddress, setNewVenueAddress] = useState("")
+  const [newVenueCity, setNewVenueCity] = useState("HCM")
+  const [addingVenue, setAddingVenue] = useState(false)
+
+  const loadVenues = useCallback((q?: string) => {
+    setVenuesLoading(true)
+    fetchVenues({ q })
+      .then((res) => setVenues(res.venues))
+      .catch(() => {})
+      .finally(() => setVenuesLoading(false))
+  }, [])
+
+  useEffect(() => {
+    if (open) loadVenues()
+  }, [open, loadVenues])
+
+  useEffect(() => {
+    if (!venueSearch) return
+    const t = setTimeout(() => loadVenues(venueSearch), 300)
+    return () => clearTimeout(t)
+  }, [venueSearch, loadVenues])
+
+  const handleAddVenue = async () => {
+    if (!newVenueName.trim()) return
+    setAddingVenue(true)
+    try {
+      const res = await createVenue({
+        name: newVenueName.trim(),
+        address: newVenueAddress.trim() || undefined,
+        city: newVenueCity,
+      })
+      setVenues((prev) => [res.venue, ...prev])
+      setSelectedVenue(res.venue)
+      setShowAddVenue(false)
+      setNewVenueName("")
+      setNewVenueAddress("")
+    } catch {
+      // silent
+    } finally {
+      setAddingVenue(false)
+    }
+  }
+
+  const filteredVenues = venues
 
   const toggleLevel = (level: SkillLevel) => {
     setSelectedLevels(prev => 
       prev.includes(level) 
         ? prev.filter(l => l !== level)
         : [...prev, level]
-    )
-  }
-
-  const toggleCourt = (court: number) => {
-    setSelectedCourts(prev => 
-      prev.includes(court)
-        ? prev.filter(c => c !== court)
-        : [...prev, court].sort((a, b) => a - b)
     )
   }
 
@@ -104,13 +132,14 @@ export function CreateMatchModal({ open, onOpenChange, onSuccess }: CreateMatchM
       const game = await createGame({
         start_time: startDate.toISOString(),
         end_time: endDate.toISOString(),
-        lat: selectedVenue.lat,
-        lng: selectedVenue.lng,
+        venue_id: selectedVenue.id,
+        lat: selectedVenue.lat ?? undefined,
+        lng: selectedVenue.lng ?? undefined,
         match_type: matchType,
         min_tier: minTier,
         max_tier: maxTier,
         max_players: maxPlayers,
-        courts: selectedCourts,
+        courts: Array.from({ length: courtCount }, (_, i) => i + 1),
         description: description || undefined,
         min_price: safeMin,
         max_price: safeMax,
@@ -137,7 +166,7 @@ export function CreateMatchModal({ open, onOpenChange, onSuccess }: CreateMatchM
   const resetAndClose = () => {
     setStep(1)
     setSelectedVenue(null)
-    setSelectedCourts([1])
+    setCourtCount(1)
     setMatchType("doubles")
     setMaxPlayers(8)
     setSelectedLevels(["newbie", "beginner_plus"])
@@ -211,59 +240,135 @@ export function CreateMatchModal({ open, onOpenChange, onSuccess }: CreateMatchM
               </div>
 
               {/* Venue List */}
-              <div className="space-y-2">
-                {filteredVenues.map((venue) => (
-                  <Card
-                    key={venue.id}
-                    className={cn(
-                      "p-4 rounded-2xl cursor-pointer transition-all",
-                      selectedVenue?.id === venue.id 
-                        ? "border-primary bg-primary/5" 
-                        : "border-border/50 hover:border-primary/30"
-                    )}
-                    onClick={() => setSelectedVenue(venue)}
-                  >
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <MapPin className="w-4 h-4 text-primary" />
-                          <h3 className="font-semibold text-sm">{venue.name}</h3>
-                        </div>
-                        <p className="text-xs text-muted-foreground mt-1">{venue.address}</p>
-                        <p className="text-xs text-muted-foreground">{venue.courts} sân</p>
-                      </div>
-                      {selectedVenue?.id === venue.id && (
-                        <div className="w-6 h-6 rounded-full bg-primary flex items-center justify-center">
-                          <Check className="w-4 h-4 text-primary-foreground" />
-                        </div>
+              {venuesLoading && venues.length === 0 ? (
+                <div className="space-y-2 animate-skeleton">
+                  <div className="h-20 rounded-2xl bg-muted/30" />
+                  <div className="h-20 rounded-2xl bg-muted/30" />
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {filteredVenues.map((venue) => (
+                    <Card
+                      key={venue.id}
+                      className={cn(
+                        "p-4 rounded-2xl cursor-pointer transition-all",
+                        selectedVenue?.id === venue.id 
+                          ? "border-primary bg-primary/5" 
+                          : "border-border/50 hover:border-primary/30"
                       )}
-                    </div>
-                  </Card>
-                ))}
-              </div>
+                      onClick={() => setSelectedVenue(venue)}
+                    >
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <MapPin className="w-4 h-4 text-primary" />
+                            <h3 className="font-semibold text-sm">{venue.name}</h3>
+                            {venue.verified && <BadgeCheck className="w-3.5 h-3.5 text-blue-400" />}
+                          </div>
+                          {venue.address && <p className="text-xs text-muted-foreground mt-1">{venue.address}</p>}
+                        </div>
+                        {selectedVenue?.id === venue.id && (
+                          <div className="w-6 h-6 rounded-full bg-primary flex items-center justify-center">
+                            <Check className="w-4 h-4 text-primary-foreground" />
+                          </div>
+                        )}
+                      </div>
+                    </Card>
+                  ))}
 
-              {/* Court Selection */}
-              {selectedVenue && (
-                <div className="pt-4 border-t border-border/20">
-                  <Label className="text-sm font-semibold mb-3 block">Chọn sân</Label>
-                  <div className="grid grid-cols-4 gap-2">
-                    {Array.from({ length: selectedVenue.courts }, (_, i) => i + 1).map((court) => (
-                      <Button
-                        key={court}
-                        variant={selectedCourts.includes(court) ? "default" : "outline"}
-                        size="sm"
-                        className="rounded-xl"
-                        onClick={() => toggleCourt(court)}
+                  {filteredVenues.length === 0 && !venuesLoading && (
+                    <p className="text-sm text-muted-foreground text-center py-4">Không tìm thấy sân nào</p>
+                  )}
+                </div>
+              )}
+
+              {/* Add new venue */}
+              {!showAddVenue ? (
+                <Button
+                  variant="outline"
+                  className="w-full rounded-xl border-dashed"
+                  onClick={() => setShowAddVenue(true)}
+                >
+                  <PlusCircle className="w-4 h-4 mr-2" />
+                  Thêm sân mới
+                </Button>
+              ) : (
+                <Card className="p-4 rounded-2xl border-primary/30 space-y-3">
+                  <p className="text-sm font-semibold">Thêm sân mới</p>
+                  <Input
+                    placeholder="Tên sân *"
+                    value={newVenueName}
+                    onChange={(e) => setNewVenueName(e.target.value)}
+                    className="rounded-xl"
+                  />
+                  <Input
+                    placeholder="Địa chỉ (VD: 123 Nguyễn Văn Cừ, Q.5)"
+                    value={newVenueAddress}
+                    onChange={(e) => setNewVenueAddress(e.target.value)}
+                    className="rounded-xl"
+                  />
+                  <div className="flex gap-2">
+                    {["HCM", "HN"].map((c) => (
+                      <button
+                        key={c}
+                        type="button"
+                        onClick={() => setNewVenueCity(c)}
+                        className={cn(
+                          "px-3 py-1.5 rounded-full text-xs border transition-colors",
+                          newVenueCity === c
+                            ? "bg-primary text-primary-foreground border-primary"
+                            : "bg-secondary border-border/40"
+                        )}
                       >
-                        Sân {court}
-                      </Button>
+                        {c === "HCM" ? "TP.HCM" : "Hà Nội"}
+                      </button>
                     ))}
                   </div>
-                  {selectedCourts.length > 0 && (
-                    <p className="text-xs text-muted-foreground mt-2">
-                      Đã chọn: {selectedCourts.map(c => `Sân ${c}`).join(", ")}
-                    </p>
-                  )}
+                  <div className="flex gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="flex-1 rounded-full"
+                      onClick={() => setShowAddVenue(false)}
+                    >
+                      Huỷ
+                    </Button>
+                    <Button
+                      size="sm"
+                      className="flex-1 rounded-full"
+                      onClick={handleAddVenue}
+                      disabled={!newVenueName.trim() || addingVenue}
+                    >
+                      {addingVenue && <Loader2 className="w-3 h-3 mr-1 animate-spin" />}
+                      Thêm
+                    </Button>
+                  </div>
+                </Card>
+              )}
+
+              {/* Court count */}
+              {selectedVenue && (
+                <div className="pt-4 border-t border-border/20">
+                  <Label className="text-sm font-semibold mb-3 block">Số sân đặt</Label>
+                  <div className="flex items-center justify-between bg-secondary rounded-2xl p-3">
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="rounded-full w-10 h-10"
+                      onClick={() => setCourtCount(Math.max(1, courtCount - 1))}
+                    >
+                      <Minus className="w-4 h-4" />
+                    </Button>
+                    <span className="text-xl font-bold">{courtCount} sân</span>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="rounded-full w-10 h-10"
+                      onClick={() => setCourtCount(courtCount + 1)}
+                    >
+                      <Plus className="w-4 h-4" />
+                    </Button>
+                  </div>
                 </div>
               )}
             </div>
@@ -305,7 +410,13 @@ export function CreateMatchModal({ open, onOpenChange, onSuccess }: CreateMatchM
                   Giờ bắt đầu
                 </Label>
                 <div className="grid grid-cols-4 gap-2">
-                  {timeSlots.map((time) => (
+                  {timeSlots
+                    .filter((time) => {
+                      if (selectedDate.toDateString() !== new Date().toDateString()) return true
+                      const [h] = time.split(":").map(Number)
+                      return h > new Date().getHours()
+                    })
+                    .map((time) => (
                     <Button
                       key={time}
                       variant={selectedTime === time ? "default" : "outline"}
@@ -558,7 +669,7 @@ export function CreateMatchModal({ open, onOpenChange, onSuccess }: CreateMatchM
                   </div>
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">Sân</span>
-                    <span className="font-medium">{selectedCourts.map(c => `Sân ${c}`).join(", ")}</span>
+                    <span className="font-medium">{courtCount} sân</span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">Ngày</span>

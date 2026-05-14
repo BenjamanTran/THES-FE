@@ -479,8 +479,10 @@ export function MatchesScreen({ onCreateMatch, onOpenGame }: MatchesScreenProps)
 
       <div className="flex-1 overflow-y-auto px-4 py-4">
         {loading ? (
-          <div className="flex items-center justify-center py-16">
-            <Loader2 className="w-6 h-6 animate-spin text-primary" />
+          <div className="space-y-3 animate-skeleton">
+            <div className="h-28 rounded-2xl bg-muted/30" />
+            <div className="h-28 rounded-2xl bg-muted/30" />
+            <div className="h-28 rounded-2xl bg-muted/30" />
           </div>
         ) : error ? (
           <div className="text-center py-12">
@@ -503,7 +505,7 @@ export function MatchesScreen({ onCreateMatch, onOpenGame }: MatchesScreenProps)
             </Button>
           </div>
         ) : (
-          <div className="space-y-3">
+          <div className="space-y-3 animate-stagger">
             {games.map((game) => {
               const { date, time } = formatTime(game)
               const isHost = game.host?.id === user?.id

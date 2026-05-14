@@ -20,6 +20,13 @@ import {
   Trophy,
   Plus,
   Flag,
+  Scale,
+  Trash2,
+  Shield,
+  UserMinus,
+  Share2,
+  Check,
+  Star,
 } from "lucide-react"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Badge } from "@/components/ui/badge"
@@ -34,6 +41,9 @@ import {
   fetchGame,
   joinGame,
   leaveGame,
+  deleteMatch,
+  promoteCoHost,
+  kickPlayer,
   type GameDetail,
   type MatchSummary,
   type FinishMatchResponse,
@@ -78,6 +88,21 @@ function fitMeta(fit: GameDetail["fit_level"]) {
   }
 }
 
+const TIER_RANGES: Record<string, [number, number]> = {
+  newbie: [0, 399], beginner_plus: [400, 799], lower_intermediate: [800, 1199],
+  intermediate: [1200, 1499], upper_intermediate: [1500, 1799], advanced: [1800, 2099],
+  semi_pro: [2100, 2399], professional: [2400, 2800],
+}
+
+function ratingToStars(tier: string, rating: number): number {
+  const bounds = TIER_RANGES[tier] || [0, 399]
+  const [low, high] = bounds
+  const range = high - low
+  if (range === 0) return 1
+  const raw = Math.round(((rating - low) / range) * 4) + 1
+  return Math.max(1, Math.min(5, raw))
+}
+
 function avatarLabel(name: string | null) {
   if (!name) return "?"
   const parts = name.trim().split(/\s+/)
@@ -97,6 +122,8 @@ export function GameDetailScreen({ gameId, onClose, onChanged }: GameDetailScree
   const [resolvedAddress, setResolvedAddress] = useState<string | null>(null)
   const [resolvingAddress, setResolvingAddress] = useState(false)
   const [showCreateMatch, setShowCreateMatch] = useState(false)
+  const [showCreateMatchAutoBalance, setShowCreateMatchAutoBalance] = useState(false)
+  const [copiedLink, setCopiedLink] = useState(false)
   const [finishingMatch, setFinishingMatch] = useState<MatchSummary | null>(null)
   const open = gameId !== null
 
@@ -125,6 +152,7 @@ export function GameDetailScreen({ gameId, onClose, onChanged }: GameDetailScree
       setResolvedAddress(null)
       setActionLoading(false)
       setShowCreateMatch(false)
+      setShowCreateMatchAutoBalance(false)
       setFinishingMatch(null)
       return
     }
@@ -153,6 +181,11 @@ export function GameDetailScreen({ gameId, onClose, onChanged }: GameDetailScree
   }, [game])
 
   const isHost = game?.host?.id === currentUserId
+  const isCoHost = useMemo(
+    () => !!game?.players.some((p) => p.id === currentUserId && p.role === "co_host"),
+    [game, currentUserId],
+  )
+  const canManage = isHost || isCoHost
   const isParticipant = useMemo(
     () => !!game?.players.some((p) => p.id === currentUserId),
     [game, currentUserId],
@@ -253,21 +286,59 @@ export function GameDetailScreen({ gameId, onClose, onChanged }: GameDetailScree
     onChanged?.()
   }
 
-  const canCreateMatch = isHost && (game?.status === "ongoing" || game?.status === "full")
+  const [deletingMatchId, setDeletingMatchId] = useState<number | null>(null)
+  const handleDeleteMatch = async (matchId: number) => {
+    if (!game) return
+    setDeletingMatchId(matchId)
+    try {
+      await deleteMatch(game.id, matchId)
+      loadGame(game.id)
+      onChanged?.()
+    } catch {
+      // silently ignore
+    } finally {
+      setDeletingMatchId(null)
+    }
+  }
+
+  const handlePromote = async (userId: number) => {
+    if (!game) return
+    try {
+      await promoteCoHost(game.id, userId)
+      loadGame(game.id)
+    } catch {
+      // silently ignore
+    }
+  }
+
+  const handleKick = async (userId: number, name: string | null) => {
+    if (!game) return
+    if (!window.confirm(`Kick ${name || `#${userId}`} khỏi game?`)) return
+    try {
+      await kickPlayer(game.id, userId)
+      loadGame(game.id)
+      onChanged?.()
+    } catch {
+      // silently ignore
+    }
+  }
+
+  const canCreateMatch = canManage && (game?.status === "ongoing" || game?.status === "full")
 
   const playerMatchCounts = useMemo(() => {
-    const counts: Record<number, { played: number; wins: number }> = {}
+    const counts: Record<number, { played: number; wins: number; losses: number }> = {}
     if (!game?.matches) return counts
     for (const match of game.matches) {
       const allPlayers = [...(match.team_a || []), ...(match.team_b || [])]
       for (const p of allPlayers) {
-        if (!counts[p.id]) counts[p.id] = { played: 0, wins: 0 }
+        if (!counts[p.id]) counts[p.id] = { played: 0, wins: 0, losses: 0 }
         counts[p.id].played += 1
         if (match.status === "finished" && match.winner_team) {
-          const isInWinnerTeam =
-            (match.winner_team === "team_a" && match.team_a.some((t) => t.id === p.id)) ||
-            (match.winner_team === "team_b" && match.team_b.some((t) => t.id === p.id))
-          if (isInWinnerTeam) counts[p.id].wins += 1
+          const inTeamA = match.team_a.some((t) => t.id === p.id)
+          const inTeamB = match.team_b.some((t) => t.id === p.id)
+          const won = (match.winner_team === "team_a" && inTeamA) || (match.winner_team === "team_b" && inTeamB)
+          if (won) counts[p.id].wins += 1
+          else counts[p.id].losses += 1
         }
       }
     }
@@ -301,8 +372,10 @@ export function GameDetailScreen({ gameId, onClose, onChanged }: GameDetailScree
 
         <div className="flex-1 min-h-0 overflow-y-auto">
           {loading && !game ? (
-            <div className="flex items-center justify-center py-16">
-              <Loader2 className="w-6 h-6 animate-spin text-primary" />
+            <div className="px-4 py-4 space-y-4 animate-skeleton">
+              <div className="h-32 rounded-2xl bg-muted/30" />
+              <div className="h-48 rounded-2xl bg-muted/30" />
+              <div className="h-24 rounded-2xl bg-muted/30" />
             </div>
           ) : error && !game ? (
             <div className="px-4 py-12 text-center">
@@ -317,7 +390,7 @@ export function GameDetailScreen({ gameId, onClose, onChanged }: GameDetailScree
               </Button>
             </div>
           ) : game ? (
-            <div className="px-4 py-4 space-y-4">
+            <div className="px-4 py-4 space-y-4 animate-stagger">
               <Card className="p-4 rounded-2xl border-border/50 bg-gradient-to-br from-primary/5 to-transparent">
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
@@ -339,7 +412,7 @@ export function GameDetailScreen({ gameId, onClose, onChanged }: GameDetailScree
                   </Badge>
                 </div>
 
-                {fitInfo && !isHost && !isParticipant && (
+                {fitInfo && !canManage && !isParticipant && (
                   <div className={`flex items-center gap-1.5 mt-3 pt-3 border-t border-border/30 text-xs ${fitInfo.className}`}>
                     <fitInfo.Icon className="w-4 h-4" />
                     <span>{fitInfo.label}</span>
@@ -444,16 +517,39 @@ export function GameDetailScreen({ gameId, onClose, onChanged }: GameDetailScree
                     <Users className="w-4 h-4 text-primary" />
                     <span className="text-sm font-semibold">Người chơi</span>
                   </div>
-                  <Badge variant="secondary" className="rounded-full text-xs">
-                    {game.players_count}/{game.max_players}
-                  </Badge>
+                  <div className="flex items-center gap-2">
+                    {canManage && game.invite_code && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="rounded-full text-[10px] h-6 px-2.5 gap-1"
+                        onClick={() => {
+                          const url = `${window.location.origin}/join/${game.invite_code}`
+                          navigator.clipboard.writeText(url)
+                          setCopiedLink(true)
+                          setTimeout(() => setCopiedLink(false), 2000)
+                        }}
+                      >
+                        {copiedLink ? <Check className="w-3 h-3" /> : <Share2 className="w-3 h-3" />}
+                        {copiedLink ? "Đã copy" : "Chia sẻ link"}
+                      </Button>
+                    )}
+                    <Badge variant="secondary" className="rounded-full text-xs">
+                      {game.players_count}/{game.max_players}
+                    </Badge>
+                  </div>
                 </div>
 
                 <div className="space-y-2">
                   {game.players.map((player) => {
                     const isThisHost = player.id === game.host?.id
+                    const isThisCoHost = player.role === "co_host"
                     const isMe = player.id === currentUserId
                     const stats = playerMatchCounts[player.id]
+                    const canKickThis = canManage && !isThisHost && !isMe
+                      && (isHost || !isThisCoHost)
+                    const canPromoteThis = isHost && !isThisHost && !isMe
+                    const gameActive = game.status !== "finished" && game.status !== "cancelled"
                     return (
                       <div key={player.id} className="flex items-center gap-3">
                         <div className="relative flex-shrink-0">
@@ -476,25 +572,62 @@ export function GameDetailScreen({ gameId, onClose, onChanged }: GameDetailScree
                           <div className="flex items-center gap-1.5 mt-0.5">
                             <SkillBadge level={player.rank?.tier ?? null} size="xs" compact />
                             {player.rank && (
-                              <span className="text-[10px] text-muted-foreground">
-                                {player.rank.rating}
+                              <span className="flex items-center gap-0.5 text-[10px] text-amber-400">
+                                {ratingToStars(player.rank.tier, player.rank.rating)}
+                                <Star className="w-2.5 h-2.5 fill-amber-400 text-amber-400" />
                               </span>
                             )}
                           </div>
                         </div>
-                        <div className="flex flex-col items-end gap-0.5 flex-shrink-0">
-                          {isThisHost && (
-                            <Badge className="bg-amber-500/20 text-amber-400 border-0 text-[10px] px-1.5">
-                              <Crown className="w-3 h-3 mr-1" />
-                              Host
-                            </Badge>
-                          )}
-                          {stats && stats.played > 0 && (
-                            <span className="text-[10px] font-semibold">
-                              {stats.played} trận
-                              {stats.wins > 0 && <span className="text-emerald-400"> {stats.wins}W</span>}
-                              {stats.played - stats.wins > 0 && <span className="text-red-400"> {stats.played - stats.wins}L</span>}
-                            </span>
+                        <div className="flex items-center gap-1 flex-shrink-0">
+                          <div className="flex flex-col items-end gap-0.5">
+                            {isThisHost && (
+                              <Badge className="bg-amber-500/20 text-amber-400 border-0 text-[10px] px-1.5">
+                                <Crown className="w-3 h-3 mr-1" />
+                                Host
+                              </Badge>
+                            )}
+                            {isThisCoHost && !isThisHost && (
+                              <Badge className="bg-blue-500/20 text-blue-400 border-0 text-[10px] px-1.5">
+                                <Shield className="w-3 h-3 mr-1" />
+                                Co-host
+                              </Badge>
+                            )}
+                            {canManage && stats && stats.played > 0 && (
+                              <span className="text-[10px] font-semibold">
+                                <span className="text-muted-foreground">{stats.played} trận</span>
+                                {stats.wins > 0 && <span className="text-emerald-400"> {stats.wins}W</span>}
+                                {stats.losses > 0 && <span className="text-red-400"> {stats.losses}L</span>}
+                              </span>
+                            )}
+                          </div>
+                          {gameActive && (canPromoteThis || canKickThis) && (
+                            <div className="flex items-center gap-0.5 ml-1">
+                              {canPromoteThis && (
+                                <button
+                                  type="button"
+                                  onClick={() => handlePromote(player.id)}
+                                  className={`p-1 rounded-full transition-colors ${
+                                    isThisCoHost
+                                      ? "text-blue-400 hover:bg-blue-500/20"
+                                      : "text-muted-foreground hover:text-blue-400 hover:bg-blue-500/10"
+                                  }`}
+                                  title={isThisCoHost ? "Gỡ co-host" : "Chỉ định co-host"}
+                                >
+                                  <Shield className="w-3.5 h-3.5" />
+                                </button>
+                              )}
+                              {canKickThis && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleKick(player.id, player.name)}
+                                  className="p-1 rounded-full text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
+                                  title="Kick"
+                                >
+                                  <UserMinus className="w-3.5 h-3.5" />
+                                </button>
+                              )}
+                            </div>
                           )}
                         </div>
                       </div>
@@ -510,6 +643,23 @@ export function GameDetailScreen({ gameId, onClose, onChanged }: GameDetailScree
                         <p className="text-sm text-muted-foreground">Đang chờ người chơi…</p>
                       </div>
                     ),
+                  )}
+
+                  {canManage && (game.status === "ongoing" || game.status === "full") && game.players.length >= 2 && (
+                    <div className="pt-2">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="w-full rounded-full text-xs"
+                        onClick={() => {
+                          setShowCreateMatchAutoBalance(true)
+                          setShowCreateMatch(true)
+                        }}
+                      >
+                        <Scale className="w-3.5 h-3.5 mr-1.5" />
+                        Cân bằng đội
+                      </Button>
+                    </div>
                   )}
                 </div>
               </Card>
@@ -573,16 +723,32 @@ export function GameDetailScreen({ gameId, onClose, onChanged }: GameDetailScree
                                   {isFinished ? "Kết thúc" : "Đang chơi"}
                                 </Badge>
                               </div>
-                              {canFinishThis && (
-                                <Button
-                                  size="sm"
-                                  className="rounded-full text-xs h-7 px-3 bg-amber-500 hover:bg-amber-600 text-white shadow-sm shadow-amber-500/30"
-                                  onClick={() => setFinishingMatch(match)}
-                                >
-                                  <Flag className="w-3.5 h-3.5 mr-1" />
-                                  Kết thúc
-                                </Button>
-                              )}
+                              <div className="flex items-center gap-1.5">
+                                {canFinishThis && (
+                                  <Button
+                                    size="sm"
+                                    className="rounded-full text-xs h-7 px-3 bg-amber-500 hover:bg-amber-600 text-white shadow-sm shadow-amber-500/30"
+                                    onClick={() => setFinishingMatch(match)}
+                                  >
+                                    <Flag className="w-3.5 h-3.5 mr-1" />
+                                    Kết thúc
+                                  </Button>
+                                )}
+                                {canManage && !isFinished && (
+                                  <Button
+                                    size="sm"
+                                    variant="ghost"
+                                    className="rounded-full h-7 w-7 p-0 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
+                                    onClick={() => handleDeleteMatch(match.id)}
+                                    disabled={deletingMatchId === match.id}
+                                  >
+                                    {deletingMatchId === match.id
+                                      ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                      : <Trash2 className="w-3.5 h-3.5" />
+                                    }
+                                  </Button>
+                                )}
+                              </div>
                             </div>
 
                             <div className="flex items-center justify-between">
@@ -713,11 +879,16 @@ export function GameDetailScreen({ gameId, onClose, onChanged }: GameDetailScree
       {game && (
         <CreateMatchSheet
           open={showCreateMatch}
-          onOpenChange={setShowCreateMatch}
+          onOpenChange={(v) => {
+            setShowCreateMatch(v)
+            if (!v) setShowCreateMatchAutoBalance(false)
+          }}
           gameId={game.id}
           players={game.players}
+          matches={game.matches || []}
           matchType={game.match_type}
           onCreated={handleMatchCreated}
+          autoBalance={showCreateMatchAutoBalance}
         />
       )}
 

@@ -176,8 +176,9 @@ export function HomeScreen({ onCreateMatch, onNavigate, onOpenGame }: HomeScreen
         </div>
 
         {loading ? (
-          <div className="flex items-center justify-center py-8">
-            <Loader2 className="w-5 h-5 animate-spin text-primary" />
+          <div className="space-y-3 animate-skeleton">
+            <div className="h-24 rounded-2xl bg-muted/30" />
+            <div className="h-24 rounded-2xl bg-muted/30" />
           </div>
         ) : !user ? (
           <Card className="p-6 rounded-2xl border-border/50 text-center">
@@ -210,7 +211,7 @@ export function HomeScreen({ onCreateMatch, onNavigate, onOpenGame }: HomeScreen
             </Button>
           </Card>
         ) : (
-          <div className="flex flex-col gap-3">
+          <div className="flex flex-col gap-3 animate-stagger">
             {games.map((game) => {
               const { date, time } = formatGameTime(game)
               const isHost = game.host?.id === user?.id
