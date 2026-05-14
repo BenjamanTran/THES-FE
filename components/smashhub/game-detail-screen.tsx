@@ -107,6 +107,62 @@ function fitMeta(fit: GameDetail["fit_level"]) {
 
 import { ratingToStars } from "@/lib/rating-stars"
 
+function generateFbPost(game: GameDetail): string {
+  const start = new Date(game.start_time)
+  const end = new Date(game.end_time)
+  const timeRange = `${start.getHours()}h-${end.getHours()}h`
+  const dateStr = format(start, "dd/MM/yyyy")
+
+  const locationParts = game.location?.split(" - ") || []
+  const locationLine = locationParts.length > 1
+    ? `📍 Địa điểm: ${locationParts.slice(1).join(" - ")}\n(${locationParts[0]})`
+    : game.location
+      ? `📍 Địa điểm: ${game.location}`
+      : ""
+
+  const levelLabels: string[] = []
+  if (game.min_tier) levelLabels.push(SKILL_LABELS[game.min_tier as SkillLevel] || game.min_tier)
+  if (game.max_tier && game.max_tier !== game.min_tier) levelLabels.push(SKILL_LABELS[game.max_tier as SkillLevel] || game.max_tier)
+  const levelLine = levelLabels.length > 0 ? `🏸 Trình độ: ${levelLabels.join(" + ")}` : ""
+
+  const courts = game.courts?.length || 1
+  const courtLine = `🏟️ ${courts} sân — tối đa ${game.max_players} người`
+  const currentLine = game.players_count > 0 ? `📌 Hiện tại đã có ${game.players_count} người` : ""
+
+  let priceLine = ""
+  const minP = game.min_price ?? 0
+  const maxP = game.max_price ?? 0
+  if (minP > 0 || maxP > 0) {
+    const fmtK = (v: number) => `${Math.round(v / 1000)}k`
+    if (minP === maxP) priceLine = `💰 Phí: ${fmtK(maxP)}/buổi`
+    else if (minP <= 0) priceLine = `💰 Phí: ~${fmtK(maxP)}/buổi`
+    else priceLine = `💰 Phí dao động: ${fmtK(minP)} - ${fmtK(maxP)}/buổi`
+  }
+
+  const gameTitle = game.title || `Kèo cầu lông vãng lai ${dateStr}`
+  const inviteUrl = game.invite_code
+    ? `\n🔗 Tham gia ngay: ${typeof window !== "undefined" ? window.location.origin : ""}/join/${game.invite_code}`
+    : ""
+
+  const lines = [
+    `🏸 ${gameTitle.toUpperCase()} ${timeRange} ${dateStr} 🏸`,
+    "",
+    locationLine,
+    "👫 Nam nữ đều welcome",
+    levelLine,
+    "🪶 Cầu thay thoải mái",
+    courtLine,
+    currentLine,
+    priceLine,
+    "",
+    "Không khí vui vẻ, ưu tiên giao lưu thoải mái, đánh vui là chính 😄",
+    "Ai muốn tham gia ib mình nhé!",
+    inviteUrl,
+  ]
+
+  return lines.filter(l => l !== "").join("\n")
+}
+
 function avatarLabel(name: string | null) {
   if (!name) return "?"
   const parts = name.trim().split(/\s+/)
@@ -129,6 +185,8 @@ export function GameDetailScreen({ gameId, onClose, onChanged }: GameDetailScree
   const [showCreateMatchAutoBalance, setShowCreateMatchAutoBalance] = useState(false)
   const [copiedLink, setCopiedLink] = useState(false)
   const [copiedAddress, setCopiedAddress] = useState(false)
+  const [copiedFbPost, setCopiedFbPost] = useState(false)
+  const [fbPostExpanded, setFbPostExpanded] = useState(false)
   const [finishingMatch, setFinishingMatch] = useState<MatchSummary | null>(null)
   const [ratingPlayer, setRatingPlayer] = useState<GamePlayer | null>(null)
   const [rateTier, setRateTier] = useState<Tier>("newbie")
@@ -578,6 +636,41 @@ export function GameDetailScreen({ gameId, onClose, onChanged }: GameDetailScree
                   Cho toàn bộ thời gian chơi
                 </p>
               </Card>
+
+              {canManage && game.invite_code && (
+                <Card className="p-3 rounded-2xl border-blue-500/20 bg-blue-500/5">
+                  <div
+                    className="flex items-center gap-2 cursor-pointer"
+                    onClick={() => setFbPostExpanded(!fbPostExpanded)}
+                  >
+                    <span className="text-sm">📋</span>
+                    <p className="flex-1 text-xs text-muted-foreground truncate">
+                      {generateFbPost(game).split("\n")[0]}
+                    </p>
+                    <Button
+                      size="sm"
+                      variant={copiedFbPost ? "default" : "outline"}
+                      className="rounded-full h-7 px-2.5 gap-1 text-[10px] flex-shrink-0"
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        navigator.clipboard.writeText(generateFbPost(game))
+                        setCopiedFbPost(true)
+                        setTimeout(() => setCopiedFbPost(false), 2000)
+                      }}
+                    >
+                      {copiedFbPost ? <Check className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
+                      {copiedFbPost ? "Đã copy" : "Copy bài FB"}
+                    </Button>
+                  </div>
+                  {fbPostExpanded && (
+                    <div className="mt-3 pt-3 border-t border-border/20">
+                      <div className="bg-secondary rounded-xl p-3 text-xs whitespace-pre-wrap leading-relaxed">
+                        {generateFbPost(game)}
+                      </div>
+                    </div>
+                  )}
+                </Card>
+              )}
 
               <Card className="p-4 rounded-2xl border-border/50">
                 <div className="flex items-center justify-between mb-3">

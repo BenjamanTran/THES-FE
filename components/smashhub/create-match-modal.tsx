@@ -1,13 +1,12 @@
 "use client"
 
 import { useState, useEffect, useCallback } from "react"
-import { X, MapPin, Calendar, Clock, Users, Shuffle, ChevronRight, Check, Minus, Plus, Search, Swords, Loader2, FileText, Wallet, PlusCircle, BadgeCheck } from "lucide-react"
+import { X, MapPin, Calendar, Clock, Users, ChevronRight, Check, Minus, Plus, Search, Swords, Loader2, FileText, Wallet, PlusCircle, BadgeCheck, Copy, Share2, PartyPopper } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Switch } from "@/components/ui/switch"
 import { cn } from "@/lib/utils"
 import { SkillBadge, SKILL_LABELS, type SkillLevel } from "./skill-badge"
 import { createGame, fetchVenues, createVenue, type Game, type Venue } from "@/lib/api"
@@ -50,7 +49,6 @@ export function CreateMatchModal({ open, onOpenChange, onSuccess }: CreateMatchM
   const [matchType, setMatchType] = useState<"singles" | "doubles">("doubles")
   const [maxPlayers, setMaxPlayers] = useState(8)
   const [selectedLevels, setSelectedLevels] = useState<SkillLevel[]>(["newbie", "beginner_plus"])
-  const [shuffleMode, setShuffleMode] = useState(false)
   const [title, setTitle] = useState("")
   const [description, setDescription] = useState("")
   const [minPrice, setMinPrice] = useState<number>(0)
@@ -58,6 +56,8 @@ export function CreateMatchModal({ open, onOpenChange, onSuccess }: CreateMatchM
   const [venueSearch, setVenueSearch] = useState("")
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [createdGame, setCreatedGame] = useState<Game | null>(null)
+  const [copiedPost, setCopiedPost] = useState(false)
 
   const [venues, setVenues] = useState<Venue[]>([])
   const [venuesLoading, setVenuesLoading] = useState(false)
@@ -144,6 +144,60 @@ export function CreateMatchModal({ open, onOpenChange, onSuccess }: CreateMatchM
     )
   }
 
+  const generateFbPost = (game: Game): string => {
+    const start = new Date(game.start_time)
+    const end = new Date(game.end_time)
+    const timeRange = `${start.getHours()}h-${end.getHours()}h`
+    const dateStr = start.toLocaleDateString("vi-VN", { day: "2-digit", month: "2-digit", year: "numeric" })
+
+    const venueName = selectedVenue?.name || ""
+    const venueAddr = selectedVenue?.address || ""
+    const locationLine = venueAddr
+      ? `📍 Địa điểm: ${venueAddr}\n(${venueName})`
+      : `📍 Địa điểm: ${venueName}`
+
+    const levelLabels = selectedLevels.map(l => SKILL_LABELS[l])
+    const levelLine = levelLabels.length > 0
+      ? `🏸 Trình độ: ${levelLabels.join(" + ")}`
+      : ""
+
+    const courtLine = `🏟️ ${courtCount} sân — tối đa ${game.max_players} người`
+
+    let priceLine = ""
+    if (game.min_price > 0 || game.max_price > 0) {
+      const fmtK = (v: number) => `${Math.round(v / 1000)}k`
+      if (game.min_price === game.max_price) {
+        priceLine = `💰 Phí: ${fmtK(game.max_price)}/buổi`
+      } else if (game.min_price <= 0) {
+        priceLine = `💰 Phí: ~${fmtK(game.max_price)}/buổi`
+      } else {
+        priceLine = `💰 Phí dao động: ${fmtK(game.min_price)} - ${fmtK(game.max_price)}/buổi`
+      }
+    }
+
+    const gameTitle = game.title || `Kèo cầu lông vãng lai ${dateStr}`
+    const inviteUrl = game.invite_code
+      ? `\n🔗 Tham gia ngay: ${window.location.origin}/join/${game.invite_code}`
+      : ""
+
+    const lines = [
+      `🏸 ${gameTitle.toUpperCase()} ${timeRange} ${dateStr} 🏸`,
+      "",
+      locationLine,
+      "👫 Nam nữ đều welcome",
+      levelLine,
+      "🪶 Cầu thay thoải mái",
+      courtLine,
+      priceLine,
+      "",
+      "Không khí vui vẻ, ưu tiên giao lưu thoải mái, đánh vui là chính 😄",
+      "Ai muốn tham gia ib mình nhé!",
+      inviteUrl,
+    ]
+
+    return lines.filter(l => l !== "").join("\n")
+  }
+
   const handleSubmit = async () => {
     if (!selectedVenue) return
     setSubmitting(true)
@@ -179,7 +233,7 @@ export function CreateMatchModal({ open, onOpenChange, onSuccess }: CreateMatchM
         min_price: safeMin,
         max_price: safeMax,
       })
-      resetAndClose()
+      setCreatedGame(game)
       onSuccess?.(game)
     } catch (err) {
       setError(err instanceof Error ? err.message : "Có lỗi xảy ra")
@@ -210,6 +264,8 @@ export function CreateMatchModal({ open, onOpenChange, onSuccess }: CreateMatchM
     setMinPrice(0)
     setMaxPrice(0)
     setError(null)
+    setCreatedGame(null)
+    setCopiedPost(false)
     onOpenChange(false)
   }
 
@@ -261,8 +317,75 @@ export function CreateMatchModal({ open, onOpenChange, onSuccess }: CreateMatchM
 
         {/* Content */}
         <div className="flex-1 min-h-0 overflow-y-auto px-4 py-4">
+          {/* Success Screen */}
+          {createdGame && (
+            <div className="space-y-5">
+              <div className="text-center py-4">
+                <div className="w-16 h-16 rounded-full bg-green-500/10 flex items-center justify-center mx-auto mb-3">
+                  <PartyPopper className="w-8 h-8 text-green-500" />
+                </div>
+                <h3 className="text-lg font-bold">Tạo trận thành công!</h3>
+                <p className="text-sm text-muted-foreground mt-1">Copy nội dung bên dưới để đăng Facebook kéo kèo</p>
+              </div>
+
+              <div className="relative">
+                <div className="bg-secondary rounded-2xl p-4 text-sm whitespace-pre-wrap leading-relaxed font-normal">
+                  {generateFbPost(createdGame)}
+                </div>
+                <Button
+                  size="sm"
+                  variant={copiedPost ? "default" : "outline"}
+                  className="absolute top-2 right-2 rounded-full h-8 px-3 gap-1.5 text-xs"
+                  onClick={() => {
+                    navigator.clipboard.writeText(generateFbPost(createdGame))
+                    setCopiedPost(true)
+                    setTimeout(() => setCopiedPost(false), 2000)
+                  }}
+                >
+                  {copiedPost ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
+                  {copiedPost ? "Đã copy!" : "Copy"}
+                </Button>
+              </div>
+
+              {createdGame.invite_code && (
+                <Card className="p-3 rounded-2xl border-primary/20 bg-primary/5">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <Share2 className="w-4 h-4 text-primary flex-shrink-0" />
+                      <span className="text-xs text-muted-foreground truncate">
+                        {window.location.origin}/join/{createdGame.invite_code}
+                      </span>
+                    </div>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="rounded-full h-7 px-2.5 text-xs flex-shrink-0"
+                      onClick={() => {
+                        navigator.clipboard.writeText(`${window.location.origin}/join/${createdGame.invite_code}`)
+                        setCopiedPost(true)
+                        setTimeout(() => setCopiedPost(false), 2000)
+                      }}
+                    >
+                      Copy link
+                    </Button>
+                  </div>
+                </Card>
+              )}
+
+              <div className="flex gap-3 pt-2">
+                <Button
+                  variant="outline"
+                  className="flex-1 rounded-full"
+                  onClick={resetAndClose}
+                >
+                  Đóng
+                </Button>
+              </div>
+            </div>
+          )}
+
           {/* Step 1: Venue Selection */}
-          {step === 1 && (
+          {!createdGame && step === 1 && (
             <div className="space-y-4">
               {/* City toggle + Search */}
               <div className="flex items-center gap-2">
@@ -428,7 +551,7 @@ export function CreateMatchModal({ open, onOpenChange, onSuccess }: CreateMatchM
           )}
 
           {/* Step 2: Date & Time */}
-          {step === 2 && (
+          {!createdGame && step === 2 && (
             <div className="space-y-6">
               {/* Date Selection */}
               <div>
@@ -510,7 +633,7 @@ export function CreateMatchModal({ open, onOpenChange, onSuccess }: CreateMatchM
           )}
 
           {/* Step 3: Match Details */}
-          {step === 3 && (
+          {!createdGame && step === 3 && (
             <div className="space-y-6">
               {/* Match Type */}
               <div>
@@ -709,25 +832,6 @@ export function CreateMatchModal({ open, onOpenChange, onSuccess }: CreateMatchM
                 <p className="text-[10px] text-muted-foreground mt-1 text-right">{description.length}/200</p>
               </div>
 
-              {/* Shuffle Mode */}
-              <Card className="p-4 rounded-2xl border-border/50">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center">
-                      <Shuffle className="w-5 h-5 text-primary" />
-                    </div>
-                    <div>
-                      <p className="font-semibold text-sm">Shuffle Mode</p>
-                      <p className="text-xs text-muted-foreground">Xáo trộn đội tự động bằng AI</p>
-                    </div>
-                  </div>
-                  <Switch
-                    checked={shuffleMode}
-                    onCheckedChange={setShuffleMode}
-                  />
-                </div>
-              </Card>
-
               {/* Summary */}
               <Card className="p-4 rounded-2xl bg-primary/5 border-primary/20">
                 <h4 className="font-semibold mb-3">Tóm tắt</h4>
@@ -789,7 +893,7 @@ export function CreateMatchModal({ open, onOpenChange, onSuccess }: CreateMatchM
         </div>
 
         {/* Footer */}
-        <div className="px-4 py-4 border-t border-border/20 flex-shrink-0 safe-bottom">
+        {!createdGame && <div className="px-4 py-4 border-t border-border/20 flex-shrink-0 safe-bottom">
           <div className="flex gap-3">
             <Button
               variant="outline"
@@ -808,7 +912,7 @@ export function CreateMatchModal({ open, onOpenChange, onSuccess }: CreateMatchM
               {!submitting && step < 3 && <ChevronRight className="w-4 h-4 ml-1" />}
             </Button>
           </div>
-        </div>
+        </div>}
       </DialogContent>
     </Dialog>
   )
