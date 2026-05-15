@@ -98,17 +98,25 @@ function LoginForm() {
           </Button>
         </form>
 
-        <p className="text-xs text-center text-muted-foreground mt-6">
-          Chưa có tài khoản?{" "}
-          <Link href="/signup" className="text-primary font-medium hover:underline">
-            Đăng ký
+        <div className="mt-4 flex flex-col items-center gap-1.5">
+          <p className="text-xs text-center text-muted-foreground">
+            Chưa có tài khoản?{" "}
+            <Link href="/signup" className="text-primary font-medium hover:underline">
+              Đăng ký
+            </Link>
+          </p>
+          <Link
+            href="/forgot-password"
+            className="block text-center text-xs text-primary font-medium hover:underline"
+          >
+            Quên mật khẩu?
           </Link>
-        </p>
+        </div>
 
         <button
           type="button"
           onClick={() => router.push(next)}
-          className="block w-full text-center text-xs text-muted-foreground hover:text-foreground mt-3"
+          className="block w-full text-center text-xs font-medium text-muted-foreground hover:text-foreground mt-4 py-2.5 rounded-full bg-muted/50 hover:bg-muted/70 border border-border/40 transition-colors"
         >
           Để sau, tiếp tục xem ứng dụng
         </button>

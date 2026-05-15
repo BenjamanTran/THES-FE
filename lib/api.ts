@@ -319,6 +319,7 @@ export interface AuthUser {
   gender: Gender;
   phone: string | null;
   guest?: boolean;
+  email_verified?: boolean;
   rank: PlayerRank | null;
 }
 
@@ -398,5 +399,36 @@ export function upgradeGuest(params: { email: string; password: string; password
   return request<AuthResponse>('/api/v1/me', {
     method: 'PATCH',
     body: JSON.stringify(params),
+  });
+}
+
+export function forgotPassword(email: string) {
+  return request<{ message: string }>('/api/v1/passwords/forgot', {
+    method: 'POST',
+    body: JSON.stringify({ email }),
+  });
+}
+
+export function resetPassword(params: {
+  token: string;
+  password: string;
+  password_confirmation: string;
+}) {
+  return request<AuthResponse & { message: string }>('/api/v1/passwords/reset', {
+    method: 'POST',
+    body: JSON.stringify(params),
+  });
+}
+
+export function verifyEmail(token: string) {
+  return request<AuthResponse & { message: string }>('/api/v1/email_verifications/verify', {
+    method: 'POST',
+    body: JSON.stringify({ token }),
+  });
+}
+
+export function resendVerificationEmail() {
+  return request<{ message: string }>('/api/v1/email_verifications/resend', {
+    method: 'POST',
   });
 }

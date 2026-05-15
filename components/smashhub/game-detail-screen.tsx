@@ -432,7 +432,24 @@ export function GameDetailScreen({ gameId, onClose, onChanged }: GameDetailScree
     }
   }
 
-  const canCreateMatch = canManage && (game?.status === "ongoing" || game?.status === "full")
+  const minPlayersForMatch = game?.match_type === "doubles" ? 4 : 2
+  const joinedPlayerCount = Math.max(game?.players_count ?? 0, game?.players?.length ?? 0)
+  const hasEnoughPlayers = joinedPlayerCount >= minPlayersForMatch
+  const gameAllowsMatches =
+    game?.status === "open" || game?.status === "full" || game?.status === "ongoing"
+  const canCreateMatch = canManage && gameAllowsMatches && hasEnoughPlayers
+  const showMatchesSection =
+    gameAllowsMatches || (game?.matches != null && game.matches.length > 0)
+
+  const isGameTime = useMemo(() => {
+    if (!game) return false
+    if (game.status === "cancelled") return false
+    if (game.status === "ongoing" || game.status === "finished") return true
+    const now = Date.now()
+    const start = new Date(game.start_time).getTime()
+    const end = new Date(game.end_time).getTime()
+    return now >= start && now <= end
+  }, [game])
 
   const playerMatchCounts = useMemo(() => {
     const counts: Record<number, { played: number; wins: number; losses: number }> = {}
@@ -499,8 +516,8 @@ export function GameDetailScreen({ gameId, onClose, onChanged }: GameDetailScree
               </Button>
             </div>
           ) : game ? (
-            <div className="px-4 py-4 space-y-4 animate-stagger">
-              <Card className="p-4 rounded-2xl border-border/50 bg-gradient-to-br from-primary/5 to-transparent">
+            <div className="px-4 py-4 flex flex-col gap-4 animate-stagger">
+              <Card className="order-0 p-4 rounded-2xl border-border/50 bg-gradient-to-br from-primary/5 to-transparent">
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
                     <h1 className="font-bold text-lg leading-snug">
@@ -529,7 +546,7 @@ export function GameDetailScreen({ gameId, onClose, onChanged }: GameDetailScree
                 )}
               </Card>
 
-              <Card className="p-4 rounded-2xl border-border/50">
+              <Card className="order-10 p-4 rounded-2xl border-border/50">
                 <div className="flex items-center gap-3 text-sm">
                   <Calendar className="w-4 h-4 text-primary flex-shrink-0" />
                   <span className="font-medium capitalize">
@@ -546,7 +563,7 @@ export function GameDetailScreen({ gameId, onClose, onChanged }: GameDetailScree
               </Card>
 
               {(game.location || game.lat !== null || game.courts) && (
-                <Card className="p-4 rounded-2xl border-border/50">
+                <Card className="order-10 p-4 rounded-2xl border-border/50">
                   {(game.location || game.lat !== null) && (() => {
                     const displayAddress = game.location || resolvedAddress || (game.lat != null ? `${game.lat}, ${game.lng}` : null)
                     return (
@@ -603,7 +620,7 @@ export function GameDetailScreen({ gameId, onClose, onChanged }: GameDetailScree
                 </Card>
               )}
 
-              <Card className="p-4 rounded-2xl border-border/50">
+              <Card className="order-10 p-4 rounded-2xl border-border/50">
                 <div className="flex items-center gap-2 mb-3">
                   <Swords className="w-4 h-4 text-primary" />
                   <span className="text-sm font-semibold">Thể thức</span>
@@ -622,7 +639,7 @@ export function GameDetailScreen({ gameId, onClose, onChanged }: GameDetailScree
                 </div>
               </Card>
 
-              <Card className="p-4 rounded-2xl border-border/50">
+              <Card className="order-10 p-4 rounded-2xl border-border/50">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <Wallet className="w-4 h-4 text-primary" />
@@ -638,7 +655,7 @@ export function GameDetailScreen({ gameId, onClose, onChanged }: GameDetailScree
               </Card>
 
               {canManage && game.invite_code && (
-                <Card className="p-3 rounded-2xl border-blue-500/20 bg-blue-500/5">
+                <Card className="order-10 p-3 rounded-2xl border-blue-500/20 bg-blue-500/5">
                   <div
                     className="flex items-center gap-2 cursor-pointer"
                     onClick={() => setFbPostExpanded(!fbPostExpanded)}
@@ -672,7 +689,7 @@ export function GameDetailScreen({ gameId, onClose, onChanged }: GameDetailScree
                 </Card>
               )}
 
-              <Card className="p-4 rounded-2xl border-border/50">
+              <Card className={`p-4 rounded-2xl border-border/50 ${isGameTime ? "order-2" : "order-10"}`}>
                 <div className="flex items-center justify-between mb-3">
                   <div className="flex items-center gap-2">
                     <Users className="w-4 h-4 text-primary" />
@@ -822,7 +839,7 @@ export function GameDetailScreen({ gameId, onClose, onChanged }: GameDetailScree
                     ),
                   )}
 
-                  {canManage && (game.status === "ongoing" || game.status === "full") && game.players.length >= 2 && (
+                  {canCreateMatch && (
                     <div className="pt-2">
                       <Button
                         size="sm"
@@ -841,11 +858,13 @@ export function GameDetailScreen({ gameId, onClose, onChanged }: GameDetailScree
                 </div>
               </Card>
 
-              {(game.status === "ongoing" || game.status === "full" || (game.matches && game.matches.length > 0)) && (
-                <Card className="p-4 rounded-2xl border-border/50">
-                  <div className="flex items-center justify-between mb-3">
-                    <div className="flex items-center gap-2">
-                      <Swords className="w-4 h-4 text-primary" />
+              {showMatchesSection && (
+                <Card
+                  className={`gap-3 min-w-0 overflow-hidden p-4 rounded-2xl border-border/50 ${isGameTime ? "order-1" : "order-20"}`}
+                >
+                  <div className="flex items-center justify-between gap-2 mb-3 min-w-0">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <Swords className="w-4 h-4 text-primary shrink-0" />
                       <span className="text-sm font-semibold">Các trận đấu</span>
                       {game.matches && game.matches.length > 0 && (
                         <Badge variant="secondary" className="rounded-full text-[10px]">
@@ -885,7 +904,7 @@ export function GameDetailScreen({ gameId, onClose, onChanged }: GameDetailScree
                         return (
                           <div
                             key={match.id}
-                            className={`p-3 rounded-xl border ${
+                            className={`min-w-0 overflow-hidden p-3 rounded-xl border ${
                               isFinished
                                 ? "border-border/30 bg-secondary/30"
                                 : isOngoing
@@ -893,20 +912,20 @@ export function GameDetailScreen({ gameId, onClose, onChanged }: GameDetailScree
                                   : "border-amber-500/20 bg-amber-500/5"
                             }`}
                           >
-                            <div className="flex items-center justify-between mb-2">
-                              <div className="flex items-center gap-2">
+                            <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-1.5 mb-2">
+                              <div className="flex items-center gap-2 min-w-0">
                                 <span className="text-xs font-semibold text-muted-foreground">
                                   Trận {match.match_number}
                                 </span>
                                 <Badge
                                   variant="outline"
-                                  className={`text-[10px] px-1.5 py-0 rounded-full ${statusBadge.cls}`}
+                                  className={`text-[10px] px-1.5 py-0 rounded-full shrink-0 ${statusBadge.cls}`}
                                 >
                                   {statusBadge.label}
                                 </Badge>
                               </div>
-                              <div className="flex items-center gap-1.5">
-                                {canManage && isPending && (
+                              <div className="flex items-center gap-1.5 flex-shrink-0">
+                                {canManage && isPending && isGameTime && (
                                   <Button
                                     size="sm"
                                     className="rounded-full text-xs h-7 px-3 bg-emerald-500 hover:bg-emerald-600 text-white"
@@ -947,10 +966,10 @@ export function GameDetailScreen({ gameId, onClose, onChanged }: GameDetailScree
                               </div>
                             </div>
 
-                            <div className="flex items-center justify-between">
-                              <div className="flex-1">
-                                <p className="text-[10px] text-muted-foreground mb-0.5">Team A</p>
-                                <div className="flex flex-wrap gap-1">
+                            <div className="space-y-2 min-w-0">
+                              <div className="min-w-0">
+                                <p className="text-[10px] text-muted-foreground mb-1 text-center">Team A</p>
+                                <div className="flex flex-wrap gap-1 justify-center">
                                   {match.team_a.map((p) => {
                                     const gp = game.players.find((pl) => pl.id === p.id)
                                     const displayTier = gp?.host_rated_tier || p.rank?.tier
@@ -959,13 +978,17 @@ export function GameDetailScreen({ gameId, onClose, onChanged }: GameDetailScree
                                       : p.rank ? ratingToStars(p.rank.tier, p.rank.rating) : null
                                     const tc = displayTier ? skillColors[displayTier] || skillColors.newbie : null
                                     return (
-                                      <div key={p.id} className="flex flex-col items-start">
-                                        <Badge variant="secondary" className="text-[10px] px-1.5 py-0 rounded-b-none">
+                                      <div key={p.id} className="flex flex-col items-center min-w-0 max-w-full">
+                                        <Badge
+                                          variant="secondary"
+                                          className="text-[10px] px-1.5 py-0 rounded-b-none max-w-[10rem] truncate text-center"
+                                          title={p.name || `#${p.id}`}
+                                        >
                                           {p.name || `#${p.id}`}
                                         </Badge>
                                         {displayTier && tc && (
-                                          <span className={`text-[9px] px-1.5 py-0 rounded-b-md ${tc.bg} ${tc.text} flex items-center gap-0.5 w-full`}>
-                                            {SKILL_LABELS[displayTier as SkillLevel]} {displayStars}<Star className="w-2 h-2 fill-current" />
+                                          <span className={`text-[9px] px-1.5 py-0 rounded-b-md ${tc.bg} ${tc.text} flex items-center justify-center gap-0.5 max-w-[10rem] truncate`}>
+                                            {SKILL_LABELS[displayTier as SkillLevel]} {displayStars}<Star className="w-2 h-2 fill-current shrink-0" />
                                           </span>
                                         )}
                                       </div>
@@ -975,7 +998,7 @@ export function GameDetailScreen({ gameId, onClose, onChanged }: GameDetailScree
                               </div>
 
                               {isFinished && match.team_a_score != null && match.team_b_score != null ? (
-                                <div className="flex items-center gap-2 mx-3 flex-shrink-0">
+                                <div className="flex items-center justify-center gap-2 py-0.5">
                                   <span className={`text-lg font-bold ${match.winner_team === "team_a" ? "text-amber-400" : "text-muted-foreground"}`}>
                                     {match.team_a_score}
                                   </span>
@@ -985,14 +1008,12 @@ export function GameDetailScreen({ gameId, onClose, onChanged }: GameDetailScree
                                   </span>
                                 </div>
                               ) : (
-                                <div className="mx-3 flex-shrink-0">
-                                  <span className="text-xs text-muted-foreground font-medium">vs</span>
-                                </div>
+                                <p className="text-center text-xs text-muted-foreground font-medium py-0.5">vs</p>
                               )}
 
-                              <div className="flex-1 text-right">
-                                <p className="text-[10px] text-muted-foreground mb-0.5">Team B</p>
-                                <div className="flex flex-wrap gap-1 justify-end">
+                              <div className="min-w-0">
+                                <p className="text-[10px] text-muted-foreground mb-1 text-center">Team B</p>
+                                <div className="flex flex-wrap gap-1 justify-center">
                                   {match.team_b.map((p) => {
                                     const gp = game.players.find((pl) => pl.id === p.id)
                                     const displayTier = gp?.host_rated_tier || p.rank?.tier
@@ -1001,13 +1022,17 @@ export function GameDetailScreen({ gameId, onClose, onChanged }: GameDetailScree
                                       : p.rank ? ratingToStars(p.rank.tier, p.rank.rating) : null
                                     const tc = displayTier ? skillColors[displayTier] || skillColors.newbie : null
                                     return (
-                                      <div key={p.id} className="flex flex-col items-end">
-                                        <Badge variant="secondary" className="text-[10px] px-1.5 py-0 rounded-b-none">
+                                      <div key={p.id} className="flex flex-col items-center min-w-0 max-w-full">
+                                        <Badge
+                                          variant="secondary"
+                                          className="text-[10px] px-1.5 py-0 rounded-b-none max-w-[10rem] truncate text-center"
+                                          title={p.name || `#${p.id}`}
+                                        >
                                           {p.name || `#${p.id}`}
                                         </Badge>
                                         {displayTier && tc && (
-                                          <span className={`text-[9px] px-1.5 py-0 rounded-b-md ${tc.bg} ${tc.text} flex items-center gap-0.5 w-full justify-end`}>
-                                            {SKILL_LABELS[displayTier as SkillLevel]} {displayStars}<Star className="w-2 h-2 fill-current" />
+                                          <span className={`text-[9px] px-1.5 py-0 rounded-b-md ${tc.bg} ${tc.text} flex items-center justify-center gap-0.5 max-w-[10rem] truncate`}>
+                                            {SKILL_LABELS[displayTier as SkillLevel]} {displayStars}<Star className="w-2 h-2 fill-current shrink-0" />
                                           </span>
                                         )}
                                       </div>
@@ -1034,7 +1059,7 @@ export function GameDetailScreen({ gameId, onClose, onChanged }: GameDetailScree
               )}
 
               {game.description && (
-                <Card className="p-4 rounded-2xl border-border/50">
+                <Card className="order-30 p-4 rounded-2xl border-border/50">
                   <div className="flex items-center gap-2 mb-2">
                     <FileText className="w-4 h-4 text-primary" />
                     <span className="text-sm font-semibold">Mô tả</span>
@@ -1046,7 +1071,7 @@ export function GameDetailScreen({ gameId, onClose, onChanged }: GameDetailScree
               )}
 
               {warning && (
-                <Card className="p-3 rounded-2xl bg-amber-500/10 border-amber-500/30">
+                <Card className="order-30 p-3 rounded-2xl bg-amber-500/10 border-amber-500/30">
                   <div className="flex items-start gap-2">
                     <AlertTriangle className="w-4 h-4 text-amber-400 flex-shrink-0 mt-0.5" />
                     <p className="text-sm text-amber-400">{warning}</p>
@@ -1055,7 +1080,7 @@ export function GameDetailScreen({ gameId, onClose, onChanged }: GameDetailScree
               )}
 
               {error && (
-                <Card className="p-3 rounded-2xl bg-destructive/10 border-destructive/30">
+                <Card className="order-30 p-3 rounded-2xl bg-destructive/10 border-destructive/30">
                   <p className="text-sm text-destructive">{error}</p>
                 </Card>
               )}
