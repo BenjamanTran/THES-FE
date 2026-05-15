@@ -1,11 +1,4 @@
-const DEFAULT_API = 'http://localhost:3000'
-
-function apiBaseUrl(): string {
-  const direct = (process.env.NEXT_PUBLIC_API_URL || DEFAULT_API).replace(/\/$/, '')
-  // Staging/production: browser uses same-origin /api/* (middleware proxy) for Safari cookies.
-  if (typeof window !== 'undefined' && process.env.NODE_ENV === 'production') return ''
-  return direct
-}
+const API_URL = (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000').replace(/\/$/, '')
 
 
 export class ApiError extends Error {
@@ -21,7 +14,7 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
   const headers: Record<string, string> = { ...(customHeaders as Record<string, string>) };
   if (body !== undefined && body !== null) headers['Content-Type'] = 'application/json';
 
-  const res = await fetch(`${apiBaseUrl()}${path}`, {
+  const res = await fetch(`${API_URL}${path}`, {
     ...rest,
     credentials: 'include',
     ...(body !== undefined ? { body } : {}),

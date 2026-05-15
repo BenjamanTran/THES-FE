@@ -53,7 +53,7 @@ steps:
       - --platform=managed
       - --allow-unauthenticated
       - --quiet
-      - --set-env-vars=NEXT_PUBLIC_API_URL=${_NEXT_PUBLIC_API_URL},API_URL=${_NEXT_PUBLIC_API_URL}
+      - --set-env-vars=NEXT_PUBLIC_API_URL=${_NEXT_PUBLIC_API_URL}
 
   - id: cleanup-revisions
     name: gcr.io/google.com/cloudsdktool/cloud-sdk:slim
