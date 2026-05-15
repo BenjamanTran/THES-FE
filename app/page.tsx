@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useRef, useEffect } from "react"
+import { Suspense, useState, useRef, useEffect } from "react"
 import { useSearchParams } from "next/navigation"
 import { BottomNav, type AppTab } from "@/components/smashhub/bottom-nav"
 import { DesktopSidebar } from "@/components/smashhub/desktop-sidebar"
@@ -13,7 +13,25 @@ import { CreateMatchModal } from "@/components/smashhub/create-match-modal"
 import { GameDetailScreen } from "@/components/smashhub/game-detail-screen"
 import { useAuth, useRequireAuth } from "@/lib/auth-context"
 
-export default function SmashHubPro() {
+function HomeLoading() {
+  return (
+    <div className="min-h-[100dvh] bg-background px-4 pt-16 space-y-4 animate-skeleton">
+      <div className="h-14 rounded-2xl bg-muted/30" />
+      <div className="h-32 rounded-2xl bg-muted/30" />
+      <div className="h-48 rounded-2xl bg-muted/30" />
+    </div>
+  )
+}
+
+export default function Page() {
+  return (
+    <Suspense fallback={<HomeLoading />}>
+      <SmashHubPro />
+    </Suspense>
+  )
+}
+
+function SmashHubPro() {
   const { loading } = useAuth()
   const requireAuth = useRequireAuth()
   const searchParams = useSearchParams()
