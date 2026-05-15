@@ -1,7 +1,10 @@
+const DEFAULT_API = 'http://localhost:3000'
+
 function apiBaseUrl(): string {
-  // Browser: same-origin /api/* (Next rewrite) — avoids Safari blocking cross-site cookies.
-  if (typeof window !== 'undefined') return '';
-  return (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000').replace(/\/$/, '');
+  const direct = (process.env.NEXT_PUBLIC_API_URL || DEFAULT_API).replace(/\/$/, '')
+  // Staging/production: browser uses same-origin /api/* (middleware proxy) for Safari cookies.
+  if (typeof window !== 'undefined' && process.env.NODE_ENV === 'production') return ''
+  return direct
 }
 
 
