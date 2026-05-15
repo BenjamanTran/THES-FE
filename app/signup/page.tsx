@@ -86,7 +86,7 @@ export default function SignupPage() {
               autoComplete="email"
               value={form.email}
               onChange={(e) => update("email", e.target.value)}
-              placeholder="ban@email.com"
+              placeholder="your@email.com"
               className="rounded-xl"
             />
           </div>

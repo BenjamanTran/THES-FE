@@ -65,7 +65,7 @@ function LoginForm() {
               autoComplete="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              placeholder="ban@email.com"
+              placeholder="your@email.com"
               className="rounded-xl"
             />
           </div>
