@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useRef, useEffect } from "react"
-import { Loader2 } from "lucide-react"
+import { useSearchParams } from "next/navigation"
 import { BottomNav, type AppTab } from "@/components/smashhub/bottom-nav"
 import { DesktopSidebar } from "@/components/smashhub/desktop-sidebar"
 import { HomeScreen } from "@/components/smashhub/home-screen"
@@ -16,6 +16,7 @@ import { useAuth, useRequireAuth } from "@/lib/auth-context"
 export default function SmashHubPro() {
   const { loading } = useAuth()
   const requireAuth = useRequireAuth()
+  const searchParams = useSearchParams()
   const [activeTab, setActiveTab] = useState<AppTab>("home")
   const [showCreateMatch, setShowCreateMatch] = useState(false)
   const [selectedGameId, setSelectedGameId] = useState<number | null>(null)
@@ -23,6 +24,14 @@ export default function SmashHubPro() {
   const [transitioning, setTransitioning] = useState(false)
   const [displayTab, setDisplayTab] = useState<AppTab>(activeTab)
   const prevTab = useRef(activeTab)
+
+  useEffect(() => {
+    const gameParam = searchParams.get("game")
+    if (gameParam) {
+      const id = Number(gameParam)
+      if (id > 0) setSelectedGameId(id)
+    }
+  }, [searchParams])
 
   useEffect(() => {
     if (activeTab !== prevTab.current) {

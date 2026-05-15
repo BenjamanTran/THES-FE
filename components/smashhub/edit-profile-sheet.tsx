@@ -1,7 +1,7 @@
 "use client"
 
 import { useState } from "react"
-import { Loader2 } from "lucide-react"
+import { Loader2, Star } from "lucide-react"
 import {
   Sheet,
   SheetContent,
@@ -15,6 +15,7 @@ import { Label } from "@/components/ui/label"
 import { useAuth } from "@/lib/auth-context"
 import { SKILL_LABELS, type SkillLevel } from "./skill-badge"
 import type { Gender, Tier } from "@/lib/api"
+import { ratingToStars } from "@/lib/rating-stars"
 
 interface EditProfileSheetProps {
   open: boolean
@@ -45,6 +46,10 @@ export function EditProfileSheet({ open, onOpenChange }: EditProfileSheetProps) 
   const [phone, setPhone] = useState(user?.phone ?? "")
   const [gender, setGender] = useState<Gender>(user?.gender ?? "unspecified")
   const [tier, setTier] = useState<Tier>(user?.rank?.tier ?? "newbie")
+  const [stars, setStars] = useState(() => {
+    const r = user?.rank
+    return r ? ratingToStars(r.tier, r.rating) : 3
+  })
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -55,6 +60,7 @@ export function EditProfileSheet({ open, onOpenChange }: EditProfileSheetProps) 
       setPhone(user.phone ?? "")
       setGender(user.gender ?? "unspecified")
       setTier(user.rank?.tier ?? "newbie")
+      setStars(user.rank ? ratingToStars(user.rank.tier, user.rank.rating) : 3)
       setError(null)
     }
     onOpenChange(next)
@@ -72,6 +78,7 @@ export function EditProfileSheet({ open, onOpenChange }: EditProfileSheetProps) 
         gender,
         phone: phone.trim(),
         tier,
+        stars,
       })
       onOpenChange(false)
     } catch (err) {
@@ -176,6 +183,31 @@ export function EditProfileSheet({ open, onOpenChange }: EditProfileSheetProps) 
             </div>
             <p className="text-[11px] text-muted-foreground">
               Hệ thống sẽ tự điều chỉnh điểm rating theo trận đấu bạn tham gia.
+            </p>
+          </div>
+
+          <div className="space-y-1.5">
+            <Label className="text-xs">Tự đánh giá (sao)</Label>
+            <div className="flex gap-1">
+              {[1, 2, 3, 4, 5].map((s) => (
+                <button
+                  key={s}
+                  type="button"
+                  onClick={() => setStars(s)}
+                  className="p-1 transition-colors"
+                >
+                  <Star
+                    className={`w-6 h-6 ${
+                      s <= stars
+                        ? "fill-amber-400 text-amber-400"
+                        : "text-muted-foreground/30"
+                    }`}
+                  />
+                </button>
+              ))}
+            </div>
+            <p className="text-[11px] text-muted-foreground">
+              1 sao = mới lên, 5 sao = sắp lên tier trên.
             </p>
           </div>
 

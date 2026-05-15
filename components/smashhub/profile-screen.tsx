@@ -2,7 +2,7 @@
 
 import { useState } from "react"
 import { useRouter } from "next/navigation"
-import { Settings, ChevronRight, Trophy, Target, Flame, TrendingUp, Calendar, Clock, Edit2, LogOut, Loader2, LogIn, UserPlus, Phone, User as UserIcon, Award } from "lucide-react"
+import { Settings, ChevronRight, Trophy, Target, Flame, TrendingUp, Calendar, Clock, Edit2, LogOut, Loader2, LogIn, UserPlus, Phone, User as UserIcon, Award, Star } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
@@ -12,6 +12,7 @@ import { useAuth } from "@/lib/auth-context"
 import { EditProfileSheet } from "./edit-profile-sheet"
 import { MockSection } from "./mock-section"
 import type { Gender } from "@/lib/api"
+import { ratingToStars } from "@/lib/rating-stars"
 import { upgradeGuest } from "@/lib/api"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -214,7 +215,21 @@ export function ProfileScreen() {
               {user.rank ? (
                 <>
                   <SkillBadge level={user.rank.tier} size="sm" />
-                  <p className="text-[11px] text-muted-foreground mt-1">{user.rank.display_name}</p>
+                  <div className="flex items-center gap-1.5 mt-1">
+                    <p className="text-[11px] text-muted-foreground">{user.rank.display_name}</p>
+                    <div className="flex gap-0.5">
+                      {[1, 2, 3, 4, 5].map((s) => (
+                        <Star
+                          key={s}
+                          className={`w-3 h-3 ${
+                            s <= ratingToStars(user.rank!.tier, user.rank!.rating)
+                              ? "fill-amber-400 text-amber-400"
+                              : "text-muted-foreground/30"
+                          }`}
+                        />
+                      ))}
+                    </div>
+                  </div>
                 </>
               ) : (
                 <p className="text-[11px] text-muted-foreground italic">

@@ -1,6 +1,6 @@
 import type { Metadata, Viewport } from 'next'
 import { Lexend } from 'next/font/google'
-import { Analytics } from '@vercel/analytics/next'
+
 import { AuthProvider } from '@/lib/auth-context'
 import './globals.css'
 
@@ -38,10 +38,10 @@ export default function RootLayout({
   children: React.ReactNode
 }>) {
   return (
-    <html lang="vi" className="dark bg-background">
+    <html lang="vi" className="dark bg-background" suppressHydrationWarning>
       <body className={`${lexend.variable} font-sans antialiased`}>
         <AuthProvider>{children}</AuthProvider>
-        {process.env.NODE_ENV === 'production' && <Analytics />}
+
       </body>
     </html>
   )

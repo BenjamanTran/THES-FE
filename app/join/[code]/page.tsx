@@ -37,7 +37,7 @@ const TIER_ORDER: Tier[] = [
 export default function JoinPage({ params }: { params: Promise<{ code: string }> }) {
   const { code } = use(params);
   const router = useRouter();
-  const { refresh } = useAuth();
+  const { user, loading: authLoading, refresh } = useAuth();
 
   const [gameInfo, setGameInfo] = useState<InviteGameInfo | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -52,10 +52,16 @@ export default function JoinPage({ params }: { params: Promise<{ code: string }>
 
   useEffect(() => {
     fetchInvite(code)
-      .then((res) => setGameInfo(res.game))
+      .then((res) => {
+        if (!authLoading && user) {
+          router.replace(`/?game=${res.game.id}`);
+          return;
+        }
+        setGameInfo(res.game);
+      })
       .catch((err) => setLoadError(err instanceof Error ? err.message : "Không tìm thấy trận"))
       .finally(() => setLoading(false));
-  }, [code]);
+  }, [code, user, authLoading, router]);
 
   const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

@@ -1,4 +1,8 @@
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000';
+function apiBaseUrl(): string {
+  // Browser: same-origin /api/* (Next rewrite) — avoids Safari blocking cross-site cookies.
+  if (typeof window !== 'undefined') return '';
+  return (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000').replace(/\/$/, '');
+}
 
 
 export class ApiError extends Error {
@@ -14,7 +18,7 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
   const headers: Record<string, string> = { ...(customHeaders as Record<string, string>) };
   if (body !== undefined && body !== null) headers['Content-Type'] = 'application/json';
 
-  const res = await fetch(`${API_URL}${path}`, {
+  const res = await fetch(`${apiBaseUrl()}${path}`, {
     ...rest,
     credentials: 'include',
     ...(body !== undefined ? { body } : {}),
@@ -327,6 +331,7 @@ export interface UpdateProfileParams {
   gender?: Gender;
   phone?: string;
   tier?: Tier;
+  stars?: number;
 }
 
 interface AuthResponse {
