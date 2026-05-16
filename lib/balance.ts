@@ -1,7 +1,9 @@
 import type { GamePlayer } from "./api"
 import { ratingFromTierAndStars } from "./rating-stars"
 
-const DEFAULT_RATING = 600
+const DEFAULT_RATING = 200 // 3★ newbie
+
+export type DoublesGenderMode = "any" | "mens" | "mixed" | "womens"
 
 export type FairnessLevel = "good" | "moderate" | "poor"
 
@@ -53,18 +55,96 @@ function combinations(arr: number[], size: number): number[][] {
  *
  * @param matchCounts - map of player id → number of matches played in this game session
  */
+function filterPoolByGender(players: GamePlayer[], mode: DoublesGenderMode): GamePlayer[] {
+  if (mode === "any") return players
+  if (mode === "mens") return players.filter((p) => p.gender === "male")
+  if (mode === "womens") return players.filter((p) => p.gender === "female")
+  return players.filter((p) => p.gender === "male" || p.gender === "female")
+}
+
+function teamMatchesGenderMode(
+  ids: number[],
+  players: GamePlayer[],
+  teamSize: number,
+  mode: DoublesGenderMode,
+): boolean {
+  if (mode === "any" || teamSize !== 2) return true
+  const genders = ids.map((id) => players.find((p) => p.id === id)?.gender)
+  if (mode === "mens") return genders.every((g) => g === "male")
+  if (mode === "womens") return genders.every((g) => g === "female")
+  return genders.length === 2 && genders.includes("male") && genders.includes("female")
+}
+
+function selectMixedDoublesFour(
+  players: GamePlayer[],
+  matchCounts?: Record<number, number>,
+): GamePlayer[] | null {
+  const males = players.filter((p) => p.gender === "male")
+  const females = players.filter((p) => p.gender === "female")
+  if (males.length < 2 || females.length < 2) return null
+
+  const pickTwo = (pool: GamePlayer[]) =>
+    matchCounts ? selectByFewestMatches(pool, 2, matchCounts) : shuffle(pool).slice(0, 2)
+
+  return [...pickTwo(males), ...pickTwo(females)]
+}
+
+function balanceMixedDoublesFour(selected: GamePlayer[]): BalanceResult {
+  const males = selected.filter((p) => p.gender === "male")
+  const females = selected.filter((p) => p.gender === "female")
+  if (males.length !== 2 || females.length !== 2) return { teamA: [], teamB: [] }
+
+  const ratingMap = new Map(selected.map((p) => [p.id, getRating(p)]))
+  const [m1, m2] = males
+  const [f1, f2] = females
+
+  const options: BalanceResult[] = [
+    { teamA: [m1.id, f1.id], teamB: [m2.id, f2.id] },
+    { teamA: [m1.id, f2.id], teamB: [m2.id, f1.id] },
+  ]
+
+  let best = options[0]
+  let bestDiff = Infinity
+  for (const opt of options) {
+    const sumA = bestSumFor(opt.teamA, ratingMap)
+    const sumB = bestSumFor(opt.teamB, ratingMap)
+    const diff = Math.abs(sumA - sumB)
+    if (diff < bestDiff) {
+      bestDiff = diff
+      best = opt
+    }
+  }
+  return best
+}
+
 export function balanceTeams(
   players: GamePlayer[],
   teamSize: number,
   matchCounts?: Record<number, number>,
+  genderMode: DoublesGenderMode = "any",
 ): BalanceResult {
   if (players.length === 0) return { teamA: [], teamB: [] }
 
-  const totalNeeded = teamSize * 2
-  let selected = players
+  const pool =
+    teamSize === 2 && genderMode !== "any" ? filterPoolByGender(players, genderMode) : players
 
-  if (players.length > totalNeeded && matchCounts) {
-    selected = selectByFewestMatches(players, totalNeeded, matchCounts)
+  const totalNeeded = teamSize * 2
+
+  if (genderMode === "mixed" && teamSize === 2) {
+    const selected =
+      pool.length > totalNeeded && matchCounts
+        ? selectMixedDoublesFour(pool, matchCounts) ?? selectMixedDoublesFour(pool)
+        : selectMixedDoublesFour(pool)
+    if (!selected || selected.length < totalNeeded) return { teamA: [], teamB: [] }
+    return balanceMixedDoublesFour(selected)
+  }
+
+  let selected = pool
+
+  if (pool.length > totalNeeded && matchCounts) {
+    selected = selectByFewestMatches(pool, totalNeeded, matchCounts)
+  } else if (pool.length > totalNeeded) {
+    selected = shuffle(pool).slice(0, totalNeeded)
   }
 
   if (selected.length === 0) return { teamA: [], teamB: [] }
@@ -73,10 +153,10 @@ export function balanceTeams(
   }
 
   if (selected.length <= totalNeeded && selected.length >= 2) {
-    return bruteForcePairing(selected, teamSize)
+    return bruteForcePairing(selected, teamSize, genderMode, players)
   }
 
-  return greedyPartition(selected, teamSize)
+  return greedyPartition(selected, teamSize, genderMode, players)
 }
 
 function selectByFewestMatches(
@@ -104,11 +184,18 @@ function selectByFewestMatches(
   return result
 }
 
-function bruteForcePairing(players: GamePlayer[], teamSize: number): BalanceResult {
+function bruteForcePairing(
+  players: GamePlayer[],
+  teamSize: number,
+  genderMode: DoublesGenderMode,
+  allPlayers: GamePlayer[],
+): BalanceResult {
   const ids = shuffle(players.map((p) => p.id))
   const ratingMap = new Map(players.map((p) => [p.id, getRating(p)]))
 
-  const teamACombos = combinations(ids, teamSize)
+  const teamACombos = combinations(ids, teamSize).filter((a) =>
+    teamMatchesGenderMode(a, allPlayers, teamSize, genderMode),
+  )
 
   let bestPairs: { a: number[]; b: number[] }[] = []
   let bestDiff = Infinity
@@ -117,6 +204,7 @@ function bruteForcePairing(players: GamePlayer[], teamSize: number): BalanceResu
     const aSet = new Set(a)
     const b = ids.filter((id) => !aSet.has(id))
     if (b.length > teamSize) continue
+    if (!teamMatchesGenderMode(b, allPlayers, teamSize, genderMode)) continue
 
     const sumA = a.reduce((s, id) => s + (ratingMap.get(id) ?? DEFAULT_RATING), 0)
     const sumB = b.reduce((s, id) => s + (ratingMap.get(id) ?? DEFAULT_RATING), 0)
@@ -134,7 +222,12 @@ function bruteForcePairing(players: GamePlayer[], teamSize: number): BalanceResu
   return { teamA: pick?.a ?? [], teamB: pick?.b ?? [] }
 }
 
-function greedyPartition(players: GamePlayer[], teamSize: number): BalanceResult {
+function greedyPartition(
+  players: GamePlayer[],
+  teamSize: number,
+  genderMode: DoublesGenderMode,
+  allPlayers: GamePlayer[],
+): BalanceResult {
   const shuffled = shuffle(players)
   const sorted = shuffled.sort((a, b) => getRating(b) - getRating(a))
 
@@ -208,6 +301,7 @@ export function fillSlots(
   candidates: GamePlayer[],
   allPlayers: GamePlayer[],
   matchCounts?: Record<number, number>,
+  genderMode: DoublesGenderMode = "any",
 ): BalanceResult {
   const slotsA = teamSize - teamA.length
   const slotsB = teamSize - teamB.length
@@ -215,9 +309,18 @@ export function fillSlots(
   if (totalSlots === 0) return { teamA: [...teamA], teamB: [...teamB] }
   if (candidates.length === 0) return { teamA: [...teamA], teamB: [...teamB] }
 
+  const filteredCandidates =
+    teamSize === 2 && genderMode !== "any"
+      ? filterPoolByGender(candidates, genderMode)
+      : candidates
+
   const pool = matchCounts
-    ? selectByFewestMatches(candidates, Math.max(totalSlots, Math.min(candidates.length, totalSlots + 4)), matchCounts)
-    : candidates
+    ? selectByFewestMatches(
+        filteredCandidates,
+        Math.max(totalSlots, Math.min(filteredCandidates.length, totalSlots + 4)),
+        matchCounts,
+      )
+    : filteredCandidates
 
   const ratingMap = new Map(allPlayers.map((p) => [p.id, getRating(p)]))
   const candidateIds = pool.map((c) => c.id)
@@ -244,9 +347,28 @@ export function fillSlots(
       newA = [...teamA, ...picked.slice(0, slotsA)]
       newB = [...teamB]
     } else {
-      const best = findBestAssignment(teamA, teamB, picked, slotsA, slotsB, ratingMap)
+      const best = findBestAssignment(
+        teamA,
+        teamB,
+        picked,
+        slotsA,
+        slotsB,
+        ratingMap,
+        allPlayers,
+        teamSize,
+        genderMode,
+      )
       newA = best.a
       newB = best.b
+    }
+
+    if (
+      genderMode !== "any" &&
+      teamSize === 2 &&
+      (!teamMatchesGenderMode(newA, allPlayers, teamSize, genderMode) ||
+        !teamMatchesGenderMode(newB, allPlayers, teamSize, genderMode))
+    ) {
+      continue
     }
 
     const sumA = bestSumFor(newA, ratingMap)
@@ -265,11 +387,26 @@ export function fillSlots(
 }
 
 function findBestAssignment(
-  teamA: number[], teamB: number[], picked: number[],
-  slotsA: number, slotsB: number,
+  teamA: number[],
+  teamB: number[],
+  picked: number[],
+  slotsA: number,
+  slotsB: number,
   ratingMap: Map<number, number>,
+  allPlayers: GamePlayer[],
+  teamSize: number,
+  genderMode: DoublesGenderMode,
 ): { a: number[]; b: number[] } {
-  const assignCombos = combinations(picked, slotsA)
+  const assignCombos = combinations(picked, slotsA).filter((forA) => {
+    const newA = [...teamA, ...forA]
+    if (!teamMatchesGenderMode(newA, allPlayers, teamSize, genderMode)) return false
+    if (slotsB === 0) return true
+    const forASet = new Set(forA)
+    const forB = picked.filter((id) => !forASet.has(id)).slice(0, slotsB)
+    const newB = [...teamB, ...forB]
+    return teamMatchesGenderMode(newB, allPlayers, teamSize, genderMode)
+  })
+
   let bestA = [...teamA]
   let bestB = [...teamB]
   let bestDiff = Infinity
@@ -281,7 +418,11 @@ function findBestAssignment(
     const newA = [...teamA, ...forA]
     const newB = [...teamB, ...forB]
     const diff = Math.abs(bestSumFor(newA, ratingMap) - bestSumFor(newB, ratingMap))
-    if (diff < bestDiff) { bestDiff = diff; bestA = newA; bestB = newB }
+    if (diff < bestDiff) {
+      bestDiff = diff
+      bestA = newA
+      bestB = newB
+    }
   }
 
   return { a: bestA, b: bestB }

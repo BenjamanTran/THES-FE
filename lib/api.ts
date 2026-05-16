@@ -96,6 +96,7 @@ export interface GamePlayer {
   name: string | null;
   gender?: Gender;
   rank?: PlayerRank | null;
+  declared_rank?: PlayerRank | null;
   role?: 'player' | 'co_host';
   placeholder?: boolean;
   host_rated_tier?: Tier | null;
@@ -106,6 +107,7 @@ export interface GamePlayer {
 export interface MatchPlayer {
   id: number;
   name: string | null;
+  gender?: Gender;
   rank?: PlayerRank | null;
 }
 
@@ -325,6 +327,13 @@ export function fetchMatches(gameId: number) {
 export function createMatch(gameId: number, params: CreateMatchParams) {
   return request<MatchDetail>(`/api/v1/games/${gameId}/matches`, {
     method: 'POST',
+    body: JSON.stringify(params),
+  });
+}
+
+export function updateMatch(gameId: number, matchId: number, params: CreateMatchParams) {
+  return request<MatchDetail>(`/api/v1/games/${gameId}/matches/${matchId}`, {
+    method: 'PATCH',
     body: JSON.stringify(params),
   });
 }

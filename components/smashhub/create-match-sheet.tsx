@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useMemo, useState } from "react"
-import { Loader2, Shuffle, Plus, X, AlertTriangle, RotateCcw, Star } from "lucide-react"
+import { Loader2, Shuffle, Plus, X, AlertTriangle, RotateCcw, Star, Mars, Venus } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Card } from "@/components/ui/card"
@@ -13,9 +13,16 @@ import {
   SheetDescription,
 } from "@/components/ui/sheet"
 import { SkillBadge } from "./skill-badge"
+import { GenderIcon } from "./gender-icon"
 import { ratingToStars } from "@/lib/rating-stars"
-import { createMatch, type GamePlayer, type MatchSummary } from "@/lib/api"
-import { balanceTeams, fillSlots, calcFairness, hasWideSkillGap } from "@/lib/balance"
+import { createMatch, updateMatch, type GamePlayer, type MatchSummary } from "@/lib/api"
+import {
+  balanceTeams,
+  fillSlots,
+  calcFairness,
+  hasWideSkillGap,
+  type DoublesGenderMode,
+} from "@/lib/balance"
 
 interface CreateMatchSheetProps {
   open: boolean
@@ -26,6 +33,7 @@ interface CreateMatchSheetProps {
   matchType: "singles" | "doubles"
   onCreated: () => void
   autoBalance?: boolean
+  editingMatch?: MatchSummary | null
 }
 
 export function CreateMatchSheet({
@@ -37,7 +45,9 @@ export function CreateMatchSheet({
   matchType,
   onCreated,
   autoBalance,
+  editingMatch = null,
 }: CreateMatchSheetProps) {
+  const isEdit = editingMatch != null
   const [teamA, setTeamA] = useState<number[]>([])
   const [teamB, setTeamB] = useState<number[]>([])
   const [loading, setLoading] = useState(false)
@@ -73,12 +83,13 @@ export function CreateMatchSheet({
   const inOngoingMatch = useMemo(() => {
     const ids = new Set<number>()
     for (const m of matches) {
+      if (editingMatch && m.id === editingMatch.id) continue
       if (m.status === "ongoing" || m.status === "pending") {
         for (const p of [...(m.team_a || []), ...(m.team_b || [])]) ids.add(p.id)
       }
     }
     return ids
-  }, [matches])
+  }, [matches, editingMatch])
 
   const assigned = new Set([...teamA, ...teamB])
   const available = players
@@ -103,19 +114,54 @@ export function CreateMatchSheet({
     else setTeamB((prev) => prev.filter((id) => id !== playerId))
   }
 
-  const autoAssign = () => {
+  const genderModeError = (mode: DoublesGenderMode): string | null => {
+    if (mode === "any") return null
+    const eligible = players.filter((p) => !inOngoingMatch.has(p.id))
+    const males = eligible.filter((p) => p.gender === "male").length
+    const females = eligible.filter((p) => p.gender === "female").length
+    if (mode === "mens" && males < 4) return "Cần ít nhất 4 nam để chia đôi nam"
+    if (mode === "womens" && females < 4) return "Cần ít nhất 4 nữ để chia đôi nữ"
+    if (mode === "mixed" && (males < 2 || females < 2)) {
+      return "Cần ít nhất 2 nam và 2 nữ để chia đôi nam/nữ"
+    }
+    return null
+  }
+
+  const autoAssign = (genderMode: DoublesGenderMode = "any") => {
+    setError(null)
+    if (matchType === "doubles" && genderMode !== "any") {
+      const msg = genderModeError(genderMode)
+      if (msg) {
+        setError(msg)
+        return
+      }
+    }
+
     const hasPartial = teamA.length > 0 || teamB.length > 0
     const isFull = teamA.length >= teamSize && teamB.length >= teamSize
 
     if (isFull || !hasPartial) {
       const eligible = players.filter((p) => !inOngoingMatch.has(p.id))
-      const result = balanceTeams(eligible.length >= teamSize * 2 ? eligible : players, teamSize, matchCounts)
+      const result = balanceTeams(
+        eligible.length >= teamSize * 2 ? eligible : players,
+        teamSize,
+        matchCounts,
+        genderMode,
+      )
+      if (result.teamA.length < teamSize || result.teamB.length < teamSize) {
+        setError(genderModeError(genderMode) || "Không đủ người chơi phù hợp để chia đội")
+        return
+      }
       setTeamA(result.teamA)
       setTeamB(result.teamB)
     } else {
       const locked = new Set([...teamA, ...teamB])
       const candidates = players.filter((p) => !locked.has(p.id) && !inOngoingMatch.has(p.id))
-      const result = fillSlots(teamA, teamB, teamSize, candidates, players, matchCounts)
+      const result = fillSlots(teamA, teamB, teamSize, candidates, players, matchCounts, genderMode)
+      if (result.teamA.length < teamSize || result.teamB.length < teamSize) {
+        setError(genderModeError(genderMode) || "Không đủ người chơi phù hợp để hoàn thành đội")
+        return
+      }
       setTeamA(result.teamA)
       setTeamB(result.teamB)
     }
@@ -129,10 +175,20 @@ export function CreateMatchSheet({
   const wideGap = useMemo(() => hasWideSkillGap(players), [players])
 
   useEffect(() => {
-    if (open && autoBalance && teamA.length === 0 && teamB.length === 0) {
+    if (!open) return
+    if (editingMatch) {
+      setTeamA(editingMatch.team_a.map((p) => p.id))
+      setTeamB(editingMatch.team_b.map((p) => p.id))
+      setError(null)
+      return
+    }
+    setTeamA([])
+    setTeamB([])
+    setError(null)
+    if (autoBalance) {
       autoAssign()
     }
-  }, [open, autoBalance])
+  }, [open, editingMatch?.id, autoBalance])
 
   const reset = () => {
     setTeamA([])
@@ -153,11 +209,15 @@ export function CreateMatchSheet({
     setLoading(true)
     setError(null)
     try {
-      await createMatch(gameId, { team_a: teamA, team_b: teamB })
+      if (isEdit && editingMatch) {
+        await updateMatch(gameId, editingMatch.id, { team_a: teamA, team_b: teamB })
+      } else {
+        await createMatch(gameId, { team_a: teamA, team_b: teamB })
+      }
       reset()
       onCreated()
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Không thể tạo trận")
+      setError(err instanceof Error ? err.message : isEdit ? "Không thể cập nhật trận" : "Không thể tạo trận")
     } finally {
       setLoading(false)
     }
@@ -170,8 +230,14 @@ export function CreateMatchSheet({
       <SheetContent side="bottom" className="rounded-t-3xl max-h-[85dvh] overflow-y-auto px-4 sm:px-6">
         <SheetHeader className="px-0 pb-4">
           <SheetTitle className="text-left flex items-center gap-2">
-            <Plus className="w-5 h-5 text-primary" />
-            Tạo trận mới
+            {isEdit ? (
+              <>Sửa trận {editingMatch.match_number}</>
+            ) : (
+              <>
+                <Plus className="w-5 h-5 text-primary" />
+                Tạo trận mới
+              </>
+            )}
           </SheetTitle>
           <SheetDescription className="text-left text-xs">
             Chọn {teamSize} người chơi cho mỗi đội ({matchType === "singles" ? "Đơn 1v1" : "Đôi 2v2"}).
@@ -179,17 +245,65 @@ export function CreateMatchSheet({
         </SheetHeader>
 
         <div className="space-y-4 pb-10 safe-bottom">
-          <div className="flex justify-end gap-2">
-            {(teamA.length > 0 || teamB.length > 0) && (
-              <Button size="sm" variant="outline" className="rounded-full text-xs h-7" onClick={() => { setTeamA([]); setTeamB([]) }}>
-                <RotateCcw className="w-3 h-3 mr-1" />
-                Xoá
+          <div className="flex flex-col gap-2">
+            <div className="flex justify-end gap-2 flex-wrap">
+              {(teamA.length > 0 || teamB.length > 0) && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="rounded-full text-xs h-7"
+                  onClick={() => {
+                    setTeamA([])
+                    setTeamB([])
+                    setError(null)
+                  }}
+                >
+                  <RotateCcw className="w-3 h-3 mr-1" />
+                  Xoá
+                </Button>
+              )}
+              <Button
+                size="sm"
+                variant="outline"
+                className="rounded-full text-xs h-7"
+                onClick={() => autoAssign("any")}
+              >
+                <Shuffle className="w-3 h-3 mr-1" />
+                Tự động chia đội
               </Button>
+            </div>
+            {matchType === "doubles" && (
+              <div className="flex flex-wrap gap-2 justify-end">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="rounded-full text-xs h-7 gap-1 border-blue-500/40 bg-blue-500/10 text-blue-400 hover:bg-blue-500/20 hover:text-blue-300 hover:border-blue-500/50"
+                  onClick={() => autoAssign("mens")}
+                >
+                  <Mars className="w-3.5 h-3.5 shrink-0" />
+                  Đôi nam
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="rounded-full text-xs h-7 gap-1 border-purple-500/40 bg-purple-500/10 text-purple-400 hover:bg-purple-500/20 hover:text-purple-300 hover:border-purple-500/50"
+                  onClick={() => autoAssign("mixed")}
+                >
+                  <Mars className="w-3.5 h-3.5 shrink-0" />
+                  <Venus className="w-3.5 h-3.5 shrink-0" />
+                  Đôi nam/nữ
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="rounded-full text-xs h-7 gap-1 border-pink-500/40 bg-pink-500/10 text-pink-400 hover:bg-pink-500/20 hover:text-pink-300 hover:border-pink-500/50"
+                  onClick={() => autoAssign("womens")}
+                >
+                  <Venus className="w-3.5 h-3.5 shrink-0" />
+                  Đôi nữ
+                </Button>
+              </div>
             )}
-            <Button size="sm" variant="outline" className="rounded-full text-xs h-7" onClick={autoAssign}>
-              <Shuffle className="w-3 h-3 mr-1" />
-              Tự động chia đội
-            </Button>
           </div>
 
           <div className="grid grid-cols-2 gap-3">
@@ -321,8 +435,12 @@ export function CreateMatchSheet({
               Huỷ
             </Button>
             <Button className="flex-1 rounded-full" onClick={handleSubmit} disabled={!canSubmit}>
-              {loading ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : <Plus className="w-4 h-4 mr-1" />}
-              Tạo trận
+              {loading ? (
+                <Loader2 className="w-4 h-4 animate-spin mr-1" />
+              ) : isEdit ? null : (
+                <Plus className="w-4 h-4 mr-1" />
+              )}
+              {isEdit ? "Lưu thay đổi" : "Tạo trận"}
             </Button>
           </div>
         </div>
@@ -356,6 +474,7 @@ function TeamColumn({
             <div key={id} className="flex items-center justify-between gap-1">
               <div className="flex items-center gap-1 min-w-0 flex-wrap">
                 <span className="text-xs">{p?.name || `#${id}`}</span>
+                {p?.gender && <GenderIcon gender={p.gender} size="sm" />}
                 <SkillBadge level={p?.host_rated_tier || p?.rank?.tier || null} size="xs" compact showIcon={false} />
                 {(() => {
                   const stars = p?.host_rated_tier && p?.host_rated_stars

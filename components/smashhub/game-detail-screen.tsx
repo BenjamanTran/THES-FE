@@ -192,6 +192,7 @@ export function GameDetailScreen({ gameId, onClose, onChanged }: GameDetailScree
   const [copiedFbPost, setCopiedFbPost] = useState(false)
   const [fbPostExpanded, setFbPostExpanded] = useState(false)
   const [finishingMatch, setFinishingMatch] = useState<MatchSummary | null>(null)
+  const [editingMatch, setEditingMatch] = useState<MatchSummary | null>(null)
   const [ratingPlayer, setRatingPlayer] = useState<GamePlayer | null>(null)
   const [rateTier, setRateTier] = useState<Tier>("newbie")
   const [rateStars, setRateStars] = useState(3)
@@ -273,7 +274,11 @@ export function GameDetailScreen({ gameId, onClose, onChanged }: GameDetailScree
     game.status !== "ongoing" &&
     game.status !== "finished" &&
     game.status !== "cancelled"
-  const canManagePlaceholders = canEditSettings
+  const canManagePlaceholders =
+    canManage &&
+    game != null &&
+    game.status !== "finished" &&
+    game.status !== "cancelled"
   const isParticipant = useMemo(
     () => !!game?.players.some((p) => p.id === currentUserId),
     [game, currentUserId],
@@ -399,8 +404,16 @@ export function GameDetailScreen({ gameId, onClose, onChanged }: GameDetailScree
 
   const handleMatchCreated = () => {
     setShowCreateMatch(false)
+    setShowCreateMatchAutoBalance(false)
+    setEditingMatch(null)
     if (game) loadGame(game.id)
     onChanged?.()
+  }
+
+  const openEditMatch = (match: MatchSummary) => {
+    setShowCreateMatch(false)
+    setShowCreateMatchAutoBalance(false)
+    setEditingMatch(match)
   }
 
   const handleMatchFinished = (_res: FinishMatchResponse) => {
@@ -485,8 +498,12 @@ export function GameDetailScreen({ gameId, onClose, onChanged }: GameDetailScree
 
   const openRatingSheet = (player: GamePlayer) => {
     setRatingPlayer(player)
-    setRateTier(player.host_rated_tier || player.rank?.tier || "newbie")
-    setRateStars(player.host_rated_stars ?? (player.rank ? ratingToStars(player.rank.tier, player.rank.rating) : 3))
+    const declared = player.declared_rank
+    setRateTier(player.host_rated_tier || declared?.tier || "newbie")
+    setRateStars(
+      player.host_rated_stars ??
+        (declared ? ratingToStars(declared.tier, declared.rating) : 3),
+    )
     setRateNote(player.host_rating_note || "")
   }
 
@@ -834,7 +851,7 @@ export function GameDetailScreen({ gameId, onClose, onChanged }: GameDetailScree
                     onClick={openAddPlaceholder}
                   >
                     <Plus className="w-3.5 h-3.5" />
-                    Thêm người tạm
+                    Thêm người
                   </Button>
                 )}
 
@@ -930,7 +947,7 @@ export function GameDetailScreen({ gameId, onClose, onChanged }: GameDetailScree
                                     type="button"
                                     onClick={() => openEditPlaceholder(player)}
                                     className="p-1 rounded-full text-muted-foreground hover:text-primary hover:bg-primary/10 transition-colors"
-                                    title="Sửa người tạm"
+                                    title="Sửa thông tin"
                                   >
                                     <Pencil className="w-3.5 h-3.5" />
                                   </button>
@@ -1100,6 +1117,17 @@ export function GameDetailScreen({ gameId, onClose, onChanged }: GameDetailScree
                                   <Button
                                     size="sm"
                                     variant="ghost"
+                                    className="rounded-full h-7 w-7 p-0 text-muted-foreground hover:text-primary hover:bg-primary/10"
+                                    onClick={() => openEditMatch(match)}
+                                    title="Sửa trận"
+                                  >
+                                    <Pencil className="w-3.5 h-3.5" />
+                                  </Button>
+                                )}
+                                {canManage && !isFinished && (
+                                  <Button
+                                    size="sm"
+                                    variant="ghost"
                                     className="rounded-full h-7 w-7 p-0 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
                                     onClick={() => handleDeleteMatch(match.id)}
                                     disabled={deletingMatchId === match.id}
@@ -1119,6 +1147,7 @@ export function GameDetailScreen({ gameId, onClose, onChanged }: GameDetailScree
                                 <div className="flex flex-wrap gap-1 justify-center">
                                   {match.team_a.map((p) => {
                                     const gp = game.players.find((pl) => pl.id === p.id)
+                                    const gender = p.gender ?? gp?.gender
                                     const displayTier = gp?.host_rated_tier || p.rank?.tier
                                     const displayStars = gp?.host_rated_tier && gp?.host_rated_stars
                                       ? gp.host_rated_stars
@@ -1128,10 +1157,11 @@ export function GameDetailScreen({ gameId, onClose, onChanged }: GameDetailScree
                                       <div key={p.id} className="flex flex-col items-center min-w-0 max-w-full">
                                         <Badge
                                           variant="secondary"
-                                          className="text-[10px] px-1.5 py-0 rounded-b-none max-w-[10rem] truncate text-center"
+                                          className="text-[10px] px-1.5 py-0 rounded-b-none max-w-[10rem] truncate text-center inline-flex items-center justify-center gap-0.5"
                                           title={p.name || `#${p.id}`}
                                         >
                                           {p.name || `#${p.id}`}
+                                          {gender && <GenderIcon gender={gender} size="sm" />}
                                         </Badge>
                                         {displayTier && tc && (
                                           <span className={`text-[9px] px-1.5 py-0 rounded-b-md ${tc.bg} ${tc.text} flex items-center justify-center gap-0.5 max-w-[10rem] truncate`}>
@@ -1163,6 +1193,7 @@ export function GameDetailScreen({ gameId, onClose, onChanged }: GameDetailScree
                                 <div className="flex flex-wrap gap-1 justify-center">
                                   {match.team_b.map((p) => {
                                     const gp = game.players.find((pl) => pl.id === p.id)
+                                    const gender = p.gender ?? gp?.gender
                                     const displayTier = gp?.host_rated_tier || p.rank?.tier
                                     const displayStars = gp?.host_rated_tier && gp?.host_rated_stars
                                       ? gp.host_rated_stars
@@ -1172,10 +1203,11 @@ export function GameDetailScreen({ gameId, onClose, onChanged }: GameDetailScree
                                       <div key={p.id} className="flex flex-col items-center min-w-0 max-w-full">
                                         <Badge
                                           variant="secondary"
-                                          className="text-[10px] px-1.5 py-0 rounded-b-none max-w-[10rem] truncate text-center"
+                                          className="text-[10px] px-1.5 py-0 rounded-b-none max-w-[10rem] truncate text-center inline-flex items-center justify-center gap-0.5"
                                           title={p.name || `#${p.id}`}
                                         >
                                           {p.name || `#${p.id}`}
+                                          {gender && <GenderIcon gender={gender} size="sm" />}
                                         </Badge>
                                         {displayTier && tc && (
                                           <span className={`text-[9px] px-1.5 py-0 rounded-b-md ${tc.bg} ${tc.text} flex items-center justify-center gap-0.5 max-w-[10rem] truncate`}>
@@ -1276,10 +1308,13 @@ export function GameDetailScreen({ gameId, onClose, onChanged }: GameDetailScree
 
       {game && (
         <CreateMatchSheet
-          open={showCreateMatch}
+          open={showCreateMatch || editingMatch != null}
           onOpenChange={(v) => {
-            setShowCreateMatch(v)
-            if (!v) setShowCreateMatchAutoBalance(false)
+            if (!v) {
+              setShowCreateMatch(false)
+              setShowCreateMatchAutoBalance(false)
+              setEditingMatch(null)
+            }
           }}
           gameId={game.id}
           players={game.players}
@@ -1287,6 +1322,7 @@ export function GameDetailScreen({ gameId, onClose, onChanged }: GameDetailScree
           matchType={game.match_type}
           onCreated={handleMatchCreated}
           autoBalance={showCreateMatchAutoBalance}
+          editingMatch={editingMatch}
         />
       )}
 
@@ -1408,12 +1444,12 @@ export function GameDetailScreen({ gameId, onClose, onChanged }: GameDetailScree
             </SheetTitle>
           </SheetHeader>
           <div className="space-y-4 pt-4 pb-6">
-            {ratingPlayer?.rank && (
+            {ratingPlayer?.declared_rank && (
               <div className="flex items-center gap-2 text-xs text-muted-foreground">
                 <span>Tự khai:</span>
-                <SkillBadge level={ratingPlayer.rank.tier} size="xs" compact />
+                <SkillBadge level={ratingPlayer.declared_rank.tier} size="xs" compact />
                 <span className="flex items-center gap-0.5 text-amber-400">
-                  {ratingToStars(ratingPlayer.rank.tier, ratingPlayer.rank.rating)}
+                  {ratingToStars(ratingPlayer.declared_rank.tier, ratingPlayer.declared_rank.rating)}
                   <Star className="w-2.5 h-2.5 fill-amber-400 text-amber-400" />
                 </span>
               </div>

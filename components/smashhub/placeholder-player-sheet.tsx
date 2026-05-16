@@ -32,15 +32,6 @@ const TIER_ORDER: Tier[] = [
   "professional",
 ]
 
-function tierFromPlayer(player: GamePlayer | null): Tier {
-  return player?.rank?.tier || player?.host_rated_tier || "intermediate"
-}
-
-function starsFromPlayer(player: GamePlayer | null): number {
-  if (player?.host_rated_stars != null) return player.host_rated_stars
-  return 3
-}
-
 interface PlaceholderPlayerSheetProps {
   open: boolean
   onOpenChange: (open: boolean) => void
@@ -68,8 +59,10 @@ export function PlaceholderPlayerSheet({
     if (!open) return
     setName(player?.name || "")
     setGender((player?.gender as Gender) || "male")
-    setTier(tierFromPlayer(player))
-    setStars(starsFromPlayer(player))
+    if (!player) {
+      setTier("intermediate")
+      setStars(3)
+    }
     setError(null)
   }, [open, player])
 
@@ -81,11 +74,10 @@ export function PlaceholderPlayerSheet({
     setSaving(true)
     setError(null)
     try {
-      const payload = { name: trimmed, gender, tier, stars }
       if (isEdit && player) {
-        await updatePlaceholder(gameId, player.id, payload)
+        await updatePlaceholder(gameId, player.id, { name: trimmed, gender })
       } else {
-        await createPlaceholder(gameId, payload)
+        await createPlaceholder(gameId, { name: trimmed, gender, tier, stars })
       }
       onSaved()
       onOpenChange(false)
@@ -101,7 +93,7 @@ export function PlaceholderPlayerSheet({
       <SheetContent side="bottom" className="rounded-t-3xl max-w-md mx-auto">
         <SheetHeader>
           <SheetTitle className="text-base">
-            {isEdit ? "Sửa người tạm" : "Thêm người tạm"}
+            {isEdit ? "Sửa thông tin" : "Thêm người"}
           </SheetTitle>
         </SheetHeader>
         <form onSubmit={onSubmit} className="space-y-4 pt-4 pb-6">
@@ -141,46 +133,50 @@ export function PlaceholderPlayerSheet({
             </div>
           </div>
 
-          <div className="space-y-1.5">
-            <Label className="text-xs">Trình độ</Label>
-            <div className="grid grid-cols-2 gap-2 max-h-32 overflow-y-auto">
-              {TIER_ORDER.map((t) => (
-                <button
-                  key={t}
-                  type="button"
-                  onClick={() => setTier(t)}
-                  className={
-                    "py-2 rounded-xl text-xs font-medium border transition-colors text-left px-3 " +
-                    (tier === t
-                      ? "bg-primary/15 text-primary border-primary/50"
-                      : "bg-secondary/50 text-foreground border-border hover:bg-secondary")
-                  }
-                >
-                  {SKILL_LABELS[t as SkillLevel] || t}
-                </button>
-              ))}
-            </div>
-          </div>
+          {!isEdit && (
+            <>
+              <div className="space-y-1.5">
+                <Label className="text-xs">Trình độ</Label>
+                <div className="grid grid-cols-2 gap-2 max-h-32 overflow-y-auto">
+                  {TIER_ORDER.map((t) => (
+                    <button
+                      key={t}
+                      type="button"
+                      onClick={() => setTier(t)}
+                      className={
+                        "py-2 rounded-xl text-xs font-medium border transition-colors text-left px-3 " +
+                        (tier === t
+                          ? "bg-primary/15 text-primary border-primary/50"
+                          : "bg-secondary/50 text-foreground border-border hover:bg-secondary")
+                      }
+                    >
+                      {SKILL_LABELS[t as SkillLevel] || t}
+                    </button>
+                  ))}
+                </div>
+              </div>
 
-          <div className="space-y-1.5">
-            <Label className="text-xs">Số sao (1–5)</Label>
-            <div className="flex gap-1">
-              {[1, 2, 3, 4, 5].map((s) => (
-                <button
-                  key={s}
-                  type="button"
-                  onClick={() => setStars(s)}
-                  className="p-1 transition-colors"
-                >
-                  <Star
-                    className={`w-6 h-6 ${
-                      s <= stars ? "fill-amber-400 text-amber-400" : "text-muted-foreground/40"
-                    }`}
-                  />
-                </button>
-              ))}
-            </div>
-          </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs">Số sao (1–5)</Label>
+                <div className="flex gap-1">
+                  {[1, 2, 3, 4, 5].map((s) => (
+                    <button
+                      key={s}
+                      type="button"
+                      onClick={() => setStars(s)}
+                      className="p-1 transition-colors"
+                    >
+                      <Star
+                        className={`w-6 h-6 ${
+                          s <= stars ? "fill-amber-400 text-amber-400" : "text-muted-foreground/40"
+                        }`}
+                      />
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </>
+          )}
 
           {error && (
             <p className="text-xs text-destructive bg-destructive/10 rounded-lg px-3 py-2">{error}</p>
