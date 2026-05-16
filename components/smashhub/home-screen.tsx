@@ -2,33 +2,32 @@
 
 import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
-import { Bell, Search, MapPin, Users, Clock, ChevronRight, Zap, Loader2, Swords } from "lucide-react"
+import { Bell, Search, MapPin, Users, Clock, ChevronRight, Swords } from "lucide-react"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { SkillBadge } from "./skill-badge"
-import { GenderIcon } from "./gender-icon"
-import { fetchMyGames, type Game } from "@/lib/api"
+import { fetchMyGames, fetchSuggestedVenues, type Game, type Venue } from "@/lib/api"
 import { useAuth } from "@/lib/auth-context"
-import { MockSection } from "./mock-section"
+import { HomeStatsCard } from "./home-stats-card"
 import type { AppTab } from "./bottom-nav"
 import { format } from "date-fns"
 import { vi } from "date-fns/locale"
 
 interface HomeScreenProps {
-  onCreateMatch: () => void
+  onCreateMatch: (venue?: Venue) => void
   onNavigate: (tab: AppTab) => void
   onOpenGame?: (id: number) => void
 }
 
 const HOME_PREVIEW_LIMIT = 2
 
-const nearbyVenues = [
-  { id: 1, name: "Galaxy Badminton", distance: "1.2 km", courts: 8, rating: 4.8 },
-  { id: 2, name: "Victory Sports", distance: "2.5 km", courts: 12, rating: 4.6 },
-  { id: 3, name: "Pro Badminton Center", distance: "3.1 km", courts: 6, rating: 4.9 },
-]
+function venueAddressLabel(venue: Venue) {
+  if (venue.address) return venue.address
+  const parts = [venue.district, venue.city].filter(Boolean)
+  return parts.length > 0 ? parts.join(", ") : "—"
+}
 
 function formatGameTime(game: Game) {
   const start = new Date(game.start_time)
@@ -44,6 +43,8 @@ export function HomeScreen({ onCreateMatch, onNavigate, onOpenGame }: HomeScreen
   const { user } = useAuth()
   const [games, setGames] = useState<Game[]>([])
   const [loading, setLoading] = useState(true)
+  const [suggestedVenues, setSuggestedVenues] = useState<Venue[]>([])
+  const [venuesLoading, setVenuesLoading] = useState(true)
 
   useEffect(() => {
     if (!user) {
@@ -67,6 +68,24 @@ export function HomeScreen({ onCreateMatch, onNavigate, onOpenGame }: HomeScreen
       cancelled = true
     }
   }, [user])
+
+  useEffect(() => {
+    let cancelled = false
+    setVenuesLoading(true)
+    fetchSuggestedVenues()
+      .then((res) => {
+        if (!cancelled) setSuggestedVenues(res.venues)
+      })
+      .catch(() => {
+        if (!cancelled) setSuggestedVenues([])
+      })
+      .finally(() => {
+        if (!cancelled) setVenuesLoading(false)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   return (
     <div className="flex flex-col">
@@ -101,46 +120,13 @@ export function HomeScreen({ onCreateMatch, onNavigate, onOpenGame }: HomeScreen
       </header>
 
       <div className="px-4 pt-4">
-        <MockSection>
-          <Card className="bg-gradient-to-br from-accent to-accent/80 border-0 p-4 rounded-3xl overflow-hidden relative">
-            <div className="absolute top-0 right-0 w-32 h-32 bg-primary/10 rounded-full blur-3xl" />
-            <div className="flex items-center justify-between relative z-10">
-              <div>
-                <div className="flex items-center gap-2 mb-1">
-                  <SkillBadge level="advanced" size="sm" />
-                  <Badge variant="outline" className="border-primary/30 text-primary text-[10px] px-2 py-0">
-                    <Zap className="w-3 h-3 mr-1" />
-                    +45 GR
-                  </Badge>
-                </div>
-                <p className="text-3xl font-bold text-foreground mt-2">2,480</p>
-                <p className="text-xs text-muted-foreground">Global Rating</p>
-              </div>
-              <div className="text-right">
-                <div className="flex flex-col gap-1">
-                  <div className="flex items-center justify-end gap-2">
-                    <span className="text-xs text-muted-foreground">Thắng</span>
-                    <span className="font-bold text-emerald-400">78%</span>
-                  </div>
-                  <div className="flex items-center justify-end gap-2">
-                    <span className="text-xs text-muted-foreground">Trận</span>
-                    <span className="font-bold text-foreground">156</span>
-                  </div>
-                  <div className="flex items-center justify-end gap-2">
-                    <span className="text-xs text-muted-foreground">Hạng</span>
-                    <span className="font-bold text-primary">#247</span>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </Card>
-        </MockSection>
+        <HomeStatsCard user={user} />
       </div>
 
       <div className="px-4 pt-6">
         <div className="grid grid-cols-2 gap-3">
           <Button
-            onClick={onCreateMatch}
+            onClick={() => onCreateMatch()}
             className="h-auto py-4 rounded-2xl bg-primary hover:bg-primary/90 flex flex-col items-center gap-2"
           >
             <div className="w-10 h-10 rounded-full bg-white/20 flex items-center justify-center">
@@ -206,7 +192,7 @@ export function HomeScreen({ onCreateMatch, onNavigate, onOpenGame }: HomeScreen
         ) : games.length === 0 ? (
           <Card className="p-6 rounded-2xl border-border/50 text-center">
             <p className="text-sm text-muted-foreground mb-3">Bạn chưa có trận đấu nào sắp tới</p>
-            <Button size="sm" className="rounded-full" onClick={onCreateMatch}>
+            <Button size="sm" className="rounded-full" onClick={() => onCreateMatch()}>
               Tạo trận mới
             </Button>
           </Card>
@@ -292,18 +278,31 @@ export function HomeScreen({ onCreateMatch, onNavigate, onOpenGame }: HomeScreen
       </section>
 
       <section className="px-4 pt-6 pb-8">
-        <MockSection>
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="font-bold text-lg">Sân gần bạn</h2>
-            <Button variant="ghost" size="sm" className="text-primary text-xs font-semibold" disabled>
-              Xem tất cả
-              <ChevronRight className="w-4 h-4 ml-1" />
-            </Button>
+        <h2 className="font-bold text-lg mb-4">Gợi ý sân</h2>
+        {venuesLoading ? (
+          <div className="flex gap-3 overflow-x-auto pb-2 -mx-4 px-4 scrollbar-hide animate-skeleton">
+            <div className="h-[168px] w-40 flex-shrink-0 rounded-2xl bg-muted/30" />
+            <div className="h-[168px] w-40 flex-shrink-0 rounded-2xl bg-muted/30" />
+            <div className="h-[168px] w-40 flex-shrink-0 rounded-2xl bg-muted/30" />
           </div>
+        ) : suggestedVenues.length === 0 ? (
+          <Card className="p-4 rounded-2xl border-border/50 text-center">
+            <p className="text-sm text-muted-foreground">Chưa có sân nào có trận đấu</p>
+          </Card>
+        ) : (
           <div className="flex gap-3 overflow-x-auto pb-2 -mx-4 px-4 scrollbar-hide">
-            {nearbyVenues.map((venue) => (
+            {suggestedVenues.map((venue) => (
               <Card
                 key={venue.id}
+                role="button"
+                tabIndex={0}
+                onClick={() => onCreateMatch(venue)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault()
+                    onCreateMatch(venue)
+                  }
+                }}
                 className="flex-shrink-0 w-40 rounded-2xl overflow-hidden border-border/50 hover:border-primary/30 transition-colors cursor-pointer"
               >
                 <div className="h-24 bg-gradient-to-br from-primary/20 to-primary/5 flex items-center justify-center">
@@ -311,19 +310,22 @@ export function HomeScreen({ onCreateMatch, onNavigate, onOpenGame }: HomeScreen
                 </div>
                 <div className="p-3">
                   <h3 className="font-semibold text-sm truncate">{venue.name}</h3>
-                  <div className="flex items-center justify-between mt-1">
-                    <span className="text-xs text-muted-foreground">{venue.distance}</span>
-                    <div className="flex items-center gap-1">
-                      <span className="text-yellow-500 text-xs">★</span>
-                      <span className="text-xs font-medium">{venue.rating}</span>
-                    </div>
+                  <p className="text-[10px] text-muted-foreground mt-1 line-clamp-2 leading-snug min-h-[2.5em]">
+                    {venueAddressLabel(venue)}
+                  </p>
+                  <div className="flex items-center justify-between mt-1.5 gap-2">
+                    <span className="text-xs font-medium text-primary">
+                      {venue.games_count ?? 0} trận
+                    </span>
+                    {venue.verified && (
+                      <span className="text-[10px] text-muted-foreground">Đã xác minh</span>
+                    )}
                   </div>
-                  <p className="text-[10px] text-muted-foreground mt-1">{venue.courts} sân</p>
                 </div>
               </Card>
             ))}
           </div>
-        </MockSection>
+        )}
       </section>
     </div>
   )

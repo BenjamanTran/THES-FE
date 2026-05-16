@@ -15,6 +15,7 @@ import {
   fetchMe,
   login as apiLogin,
   logout as apiLogout,
+  mergeAuthUser,
   signup as apiSignup,
   updateProfile as apiUpdateProfile,
   type AuthUser,
@@ -45,7 +46,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const refresh = useCallback(async () => {
     try {
       const res = await fetchMe();
-      setUser(res.user);
+      setUser(mergeAuthUser(res));
     } catch (err) {
       if (err instanceof ApiError && err.status === 401) {
         setUser(null);
@@ -61,8 +62,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const login = useCallback(async (email: string, password: string) => {
     const res = await apiLogin({ email, password });
-    setUser(res.user);
-    return res.user;
+    const user = mergeAuthUser(res);
+    setUser(user);
+    return user;
   }, []);
 
   const signup = useCallback(
@@ -73,8 +75,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       password_confirmation: string;
     }) => {
       const res = await apiSignup(params);
-      setUser(res.user);
-      return res.user;
+      const user = mergeAuthUser(res);
+      setUser(user);
+      return user;
     },
     [],
   );
@@ -89,8 +92,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const updateProfile = useCallback(async (params: UpdateProfileParams) => {
     const res = await apiUpdateProfile(params);
-    setUser(res.user);
-    return res.user;
+    const user = mergeAuthUser(res);
+    setUser(user);
+    return user;
   }, []);
 
   const value = useMemo<AuthContextValue>(

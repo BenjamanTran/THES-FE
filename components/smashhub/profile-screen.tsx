@@ -187,6 +187,9 @@ export function ProfileScreen() {
   }
 
   const userStats = { ...userStatsMock, name: user.name, email: user.email }
+  const declaredRank = user.declared_rank ?? user.rank
+  const matchStats = user.rank
+  const apiStats = user.stats
 
   return (
     <div className="flex flex-col">
@@ -227,17 +230,17 @@ export function ProfileScreen() {
               {userStats.email && (
                 <p className="text-xs text-muted-foreground mb-2 truncate">{userStats.email}</p>
               )}
-              {user.rank ? (
+              {declaredRank ? (
                 <>
-                  <SkillBadge level={user.rank.tier} size="sm" />
+                  <SkillBadge level={declaredRank.tier} size="sm" />
                   <div className="flex items-center gap-1.5 mt-1">
-                    <p className="text-[11px] text-muted-foreground">{user.rank.display_name}</p>
+                    <p className="text-[11px] text-muted-foreground">{declaredRank.display_name}</p>
                     <div className="flex gap-0.5">
                       {[1, 2, 3, 4, 5].map((s) => (
                         <Star
                           key={s}
                           className={`w-3 h-3 ${
-                            s <= ratingToStars(user.rank!.tier, user.rank!.rating)
+                            s <= ratingToStars(declaredRank.tier, declaredRank.rating)
                               ? "fill-amber-400 text-amber-400"
                               : "text-muted-foreground/30"
                           }`}
@@ -248,7 +251,7 @@ export function ProfileScreen() {
                 </>
               ) : (
                 <p className="text-[11px] text-muted-foreground italic">
-                  Chưa đánh giá trình độ
+                  Chưa khai báo trình độ
                 </p>
               )}
               <Button
@@ -319,8 +322,8 @@ export function ProfileScreen() {
               <ProfileRow
                 icon={<Award className="w-4 h-4" />}
                 label="Trình độ"
-                value={user.rank?.display_name || "Chưa đánh giá"}
-                muted={!user.rank}
+                value={declaredRank?.display_name || "Chưa khai báo"}
+                muted={!declaredRank}
               />
               <ProfileRow
                 icon={<Phone className="w-4 h-4" />}
@@ -427,48 +430,67 @@ export function ProfileScreen() {
           </div>
         )}
 
-        {/* Stats Card */}
+        {/* Declared skill card */}
         <div className="px-4 pb-4">
-          <MockSection>
           <Card className="bg-gradient-to-br from-accent to-accent/80 border-0 p-4 rounded-3xl overflow-hidden relative">
             <div className="absolute top-0 right-0 w-40 h-40 bg-primary/10 rounded-full blur-3xl" />
             
-            <div className="flex items-center justify-between mb-4 relative z-10">
+            <div className="flex items-start justify-between mb-4 relative z-10 gap-4">
               <div>
-                <p className="text-xs text-muted-foreground mb-1">Global Rating</p>
-                <div className="flex items-baseline gap-2">
-                  <span className="text-4xl font-bold">{userStats.gr}</span>
-                  <Badge className="bg-emerald-500/20 text-emerald-400 border-0 text-xs">
-                    <TrendingUp className="w-3 h-3 mr-1" />
-                    {userStats.grChange}
-                  </Badge>
+                <p className="text-xs text-muted-foreground mb-2">Trình độ khai báo</p>
+                {declaredRank ? (
+                  <>
+                    <div className="flex items-center gap-2 mb-2">
+                      <SkillBadge level={declaredRank.tier} size="sm" />
+                    </div>
+                    <p className="text-2xl font-bold truncate">{declaredRank.display_name}</p>
+                    <div className="flex gap-0.5 mt-2">
+                      {[1, 2, 3, 4, 5].map((s) => (
+                        <Star
+                          key={s}
+                          className={`w-4 h-4 ${
+                            s <= ratingToStars(declaredRank.tier, declaredRank.rating)
+                              ? "fill-amber-400 text-amber-400"
+                              : "text-muted-foreground/30"
+                          }`}
+                        />
+                      ))}
+                    </div>
+                  </>
+                ) : (
+                  <p className="text-sm text-muted-foreground">Chưa khai báo trình độ</p>
+                )}
+              </div>
+              {declaredRank && (
+                <div className="text-right shrink-0">
+                  <p className="text-xs text-muted-foreground mb-1">Điểm khai báo</p>
+                  <p className="text-2xl font-bold text-primary">
+                    {declaredRank.rating.toLocaleString("vi-VN")}
+                  </p>
                 </div>
-              </div>
-              <div className="text-right">
-                <p className="text-xs text-muted-foreground mb-1">Xếp hạng</p>
-                <p className="text-2xl font-bold text-primary">#{userStats.rank}</p>
-              </div>
+              )}
             </div>
 
             <div className="grid grid-cols-3 gap-3 relative z-10">
               <div className="text-center p-3 rounded-2xl bg-background/10">
                 <Trophy className="w-5 h-5 mx-auto mb-1 text-amber-400" />
-                <p className="text-lg font-bold">{userStats.winRate}%</p>
+                <p className="text-lg font-bold">{apiStats?.win_rate ?? 0}%</p>
                 <p className="text-[10px] text-muted-foreground">Tỷ lệ thắng</p>
               </div>
               <div className="text-center p-3 rounded-2xl bg-background/10">
                 <Target className="w-5 h-5 mx-auto mb-1 text-blue-400" />
-                <p className="text-lg font-bold">{userStats.totalMatches}</p>
+                <p className="text-lg font-bold">{matchStats?.matches_count ?? 0}</p>
                 <p className="text-[10px] text-muted-foreground">Tổng trận</p>
               </div>
               <div className="text-center p-3 rounded-2xl bg-background/10">
-                <Flame className="w-5 h-5 mx-auto mb-1 text-primary" />
-                <p className="text-lg font-bold">{userStats.streak}</p>
-                <p className="text-[10px] text-muted-foreground">Chuỗi thắng</p>
+                <TrendingUp className="w-5 h-5 mx-auto mb-1 text-primary" />
+                <p className="text-lg font-bold">
+                  {apiStats?.global_rank != null ? `#${apiStats.global_rank}` : "—"}
+                </p>
+                <p className="text-[10px] text-muted-foreground">Hạng GR</p>
               </div>
             </div>
           </Card>
-          </MockSection>
         </div>
 
         {/* Win/Loss Progress */}

@@ -11,6 +11,7 @@ import { MatchesScreen } from "@/components/smashhub/matches-screen"
 import { MyGamesScreen } from "@/components/smashhub/my-games-screen"
 import { ProfileScreen } from "@/components/smashhub/profile-screen"
 import { CreateMatchModal } from "@/components/smashhub/create-match-modal"
+import type { Venue } from "@/lib/api"
 import { GameDetailScreen } from "@/components/smashhub/game-detail-screen"
 import { useAuth, useRequireAuth } from "@/lib/auth-context"
 
@@ -38,6 +39,7 @@ function SmashHubPro() {
   const searchParams = useSearchParams()
   const [activeTab, setActiveTab] = useState<AppTab>("home")
   const [showCreateMatch, setShowCreateMatch] = useState(false)
+  const [createMatchInitialVenue, setCreateMatchInitialVenue] = useState<Venue | null>(null)
   const [selectedGameId, setSelectedGameId] = useState<number | null>(null)
   const [refreshKey, setRefreshKey] = useState(0)
   const [transitioning, setTransitioning] = useState(false)
@@ -68,9 +70,15 @@ function SmashHubPro() {
   const closeGameDetail = () => setSelectedGameId(null)
   const handleGameChanged = () => setRefreshKey((k) => k + 1)
 
-  const handleCreateMatch = () => {
+  const handleCreateMatch = (venue?: Venue) => {
     if (!requireAuth()) return
+    setCreateMatchInitialVenue(venue ?? null)
     setShowCreateMatch(true)
+  }
+
+  const handleCreateMatchOpenChange = (open: boolean) => {
+    setShowCreateMatch(open)
+    if (!open) setCreateMatchInitialVenue(null)
   }
 
   if (loading) {
@@ -169,8 +177,9 @@ function SmashHubPro() {
       {/* Create Match Modal */}
       <CreateMatchModal
         open={showCreateMatch}
-        onOpenChange={setShowCreateMatch}
+        onOpenChange={handleCreateMatchOpenChange}
         onSuccess={handleGameChanged}
+        initialVenue={createMatchInitialVenue}
       />
 
       {/* Game Detail Screen */}

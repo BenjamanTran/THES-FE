@@ -36,6 +36,27 @@ export interface PlayerRank {
   division: number | null;
   rating: number;
   display_name: string;
+  wins?: number;
+  losses?: number;
+  matches_count?: number;
+  host_rating_count?: number;
+  host_base_rating?: number | null;
+  match_points?: number;
+}
+
+export interface WeeklyGr {
+  delta: number;
+  wins: number;
+  losses: number;
+  matches: number;
+  win_points: number;
+  loss_points: number;
+}
+
+export interface UserStats {
+  weekly_gr: WeeklyGr;
+  global_rank: number | null;
+  win_rate: number | null;
 }
 
 export interface ParticipantSummary {
@@ -76,6 +97,7 @@ export interface GamePlayer {
   gender?: Gender;
   rank?: PlayerRank | null;
   role?: 'player' | 'co_host';
+  placeholder?: boolean;
   host_rated_tier?: Tier | null;
   host_rated_stars?: number | null;
   host_rating_note?: string | null;
@@ -175,6 +197,7 @@ export interface Venue {
   lat: number | null;
   lng: number | null;
   verified: boolean;
+  games_count?: number;
 }
 
 export function fetchVenues(params?: { city?: string; q?: string }) {
@@ -183,6 +206,10 @@ export function fetchVenues(params?: { city?: string; q?: string }) {
   if (params?.q) qs.set('q', params.q);
   const query = qs.toString();
   return request<{ venues: Venue[] }>(`/api/v1/venues${query ? `?${query}` : ''}`);
+}
+
+export function fetchSuggestedVenues() {
+  return request<{ venues: Venue[] }>('/api/v1/venues?suggested=1');
 }
 
 export function createVenue(params: { name: string; address?: string; city?: string; district?: string; lat?: number; lng?: number }) {
@@ -230,12 +257,56 @@ export function fetchGame(id: number) {
   return request<GameDetail>(`/api/v1/games/${id}`);
 }
 
+export interface UpdateGameSettingsParams {
+  max_players?: number;
+  courts?: number[];
+}
+
+export function updateGameSettings(id: number, params: UpdateGameSettingsParams) {
+  return request<GameDetail>(`/api/v1/games/${id}`, {
+    method: 'PATCH',
+    body: JSON.stringify(params),
+  });
+}
+
 export function joinGame(id: number) {
   return request<JoinResponse>(`/api/v1/games/${id}/join`, { method: 'POST' });
 }
 
 export function leaveGame(id: number) {
   return request<{ status: 'left' }>(`/api/v1/games/${id}/leave`, { method: 'POST' });
+}
+
+export interface PlaceholderPlayerParams {
+  name: string;
+  gender: Gender;
+  tier: Tier;
+  stars: number;
+}
+
+export function createPlaceholder(gameId: number, params: PlaceholderPlayerParams) {
+  return request<GamePlayer>(`/api/v1/games/${gameId}/placeholders`, {
+    method: 'POST',
+    body: JSON.stringify(params),
+  });
+}
+
+export function updatePlaceholder(
+  gameId: number,
+  userId: number,
+  params: Partial<PlaceholderPlayerParams>,
+) {
+  return request<GamePlayer>(`/api/v1/games/${gameId}/placeholders/${userId}`, {
+    method: 'PATCH',
+    body: JSON.stringify(params),
+  });
+}
+
+export function deletePlaceholder(gameId: number, userId: number) {
+  return request<{ status: 'deleted'; user_id: number }>(
+    `/api/v1/games/${gameId}/placeholders/${userId}`,
+    { method: 'DELETE' },
+  );
 }
 
 export function createGame(params: CreateGameParams) {
@@ -321,6 +392,8 @@ export interface AuthUser {
   guest?: boolean;
   email_verified?: boolean;
   rank: PlayerRank | null;
+  declared_rank?: PlayerRank | null;
+  stats?: UserStats;
 }
 
 export interface UpdateProfileParams {
@@ -331,8 +404,13 @@ export interface UpdateProfileParams {
   stars?: number;
 }
 
-interface AuthResponse {
+export interface AuthResponse {
   user: AuthUser;
+  stats?: UserStats;
+}
+
+export function mergeAuthUser(res: AuthResponse): AuthUser {
+  return { ...res.user, stats: res.stats };
 }
 
 export function signup(params: {

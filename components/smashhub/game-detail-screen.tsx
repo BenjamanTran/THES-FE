@@ -30,6 +30,7 @@ import {
   Play,
   Pencil,
   Copy,
+  Minus,
 } from "lucide-react"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Badge } from "@/components/ui/badge"
@@ -39,15 +40,18 @@ import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/compone
 import { SkillBadge, SKILL_LABELS, skillColors, type SkillLevel } from "./skill-badge"
 import { GenderIcon } from "./gender-icon"
 import { CreateMatchSheet } from "./create-match-sheet"
+import { PlaceholderPlayerSheet } from "./placeholder-player-sheet"
 import { ScoreEntryModal } from "./score-entry-modal"
 import {
   fetchGame,
+  updateGameSettings,
   joinGame,
   leaveGame,
   deleteMatch,
   startMatch,
   promoteCoHost,
   kickPlayer,
+  deletePlaceholder,
   ratePlayer,
   type GameDetail,
   type GamePlayer,
@@ -193,7 +197,16 @@ export function GameDetailScreen({ gameId, onClose, onChanged }: GameDetailScree
   const [rateStars, setRateStars] = useState(3)
   const [rateNote, setRateNote] = useState("")
   const [rateSaving, setRateSaving] = useState(false)
+  const [showEditSettings, setShowEditSettings] = useState(false)
+  const [editCourts, setEditCourts] = useState<number[]>([])
+  const [editMaxPlayers, setEditMaxPlayers] = useState(8)
+  const [settingsSaving, setSettingsSaving] = useState(false)
+  const [settingsError, setSettingsError] = useState<string | null>(null)
+  const [showPlaceholderSheet, setShowPlaceholderSheet] = useState(false)
+  const [editingPlaceholder, setEditingPlaceholder] = useState<GamePlayer | null>(null)
   const open = gameId !== null
+
+  const COURT_OPTIONS = useMemo(() => Array.from({ length: 16 }, (_, i) => i + 1), [])
 
   const loadGame = useCallback(
     async (id: number) => {
@@ -254,6 +267,13 @@ export function GameDetailScreen({ gameId, onClose, onChanged }: GameDetailScree
     [game, currentUserId],
   )
   const canManage = isHost || isCoHost
+  const canEditSettings =
+    canManage &&
+    game != null &&
+    game.status !== "ongoing" &&
+    game.status !== "finished" &&
+    game.status !== "cancelled"
+  const canManagePlaceholders = canEditSettings
   const isParticipant = useMemo(
     () => !!game?.players.some((p) => p.id === currentUserId),
     [game, currentUserId],
@@ -342,6 +362,41 @@ export function GameDetailScreen({ gameId, onClose, onChanged }: GameDetailScree
     }
   }, [game, isHost, isParticipant, isPast])
 
+  const openEditSettings = () => {
+    if (!game) return
+    setEditCourts(game.courts?.length ? [...game.courts] : [1])
+    setEditMaxPlayers(game.max_players)
+    setSettingsError(null)
+    setShowEditSettings(true)
+  }
+
+  const toggleEditCourt = (court: number) => {
+    setEditCourts((prev) =>
+      prev.includes(court)
+        ? prev.filter((c) => c !== court)
+        : [...prev, court].sort((a, b) => a - b),
+    )
+  }
+
+  const handleSaveSettings = async () => {
+    if (!game) return
+    setSettingsSaving(true)
+    setSettingsError(null)
+    try {
+      const updated = await updateGameSettings(game.id, {
+        courts: editCourts,
+        max_players: editMaxPlayers,
+      })
+      setGame(updated)
+      setShowEditSettings(false)
+      onChanged?.()
+    } catch (err) {
+      setSettingsError(err instanceof Error ? err.message : "Không thể lưu thay đổi")
+    } finally {
+      setSettingsSaving(false)
+    }
+  }
+
   const handleMatchCreated = () => {
     setShowCreateMatch(false)
     if (game) loadGame(game.id)
@@ -399,6 +454,28 @@ export function GameDetailScreen({ gameId, onClose, onChanged }: GameDetailScree
     if (!window.confirm(`Kick ${name || `#${userId}`} khỏi game?`)) return
     try {
       await kickPlayer(game.id, userId)
+      loadGame(game.id)
+      onChanged?.()
+    } catch {
+      // silently ignore
+    }
+  }
+
+  const openAddPlaceholder = () => {
+    setEditingPlaceholder(null)
+    setShowPlaceholderSheet(true)
+  }
+
+  const openEditPlaceholder = (player: GamePlayer) => {
+    setEditingPlaceholder(player)
+    setShowPlaceholderSheet(true)
+  }
+
+  const handleDeletePlaceholder = async (userId: number, name: string | null) => {
+    if (!game) return
+    if (!window.confirm(`Xóa ${name || "người tạm"} khỏi danh sách?`)) return
+    try {
+      await deletePlaceholder(game.id, userId)
       loadGame(game.id)
       onChanged?.()
     } catch {
@@ -607,14 +684,32 @@ export function GameDetailScreen({ gameId, onClose, onChanged }: GameDetailScree
                     </div>
                     )
                   })()}
-                  {game.courts && game.courts.length > 0 && (
-                    <div className="flex items-center gap-2 mt-3 flex-wrap">
-                      <span className="text-xs text-muted-foreground">Sân:</span>
-                      {game.courts.map((c) => (
-                        <Badge key={c} variant="outline" className="text-[10px] px-2 py-0.5">
-                          Sân {c}
-                        </Badge>
-                      ))}
+                  {(game.courts?.length || canEditSettings) && (
+                    <div className="flex items-start justify-between gap-2 mt-3">
+                      <div className="flex items-center gap-2 flex-wrap min-w-0">
+                        <span className="text-xs text-muted-foreground">Sân:</span>
+                        {game.courts && game.courts.length > 0 ? (
+                          game.courts.map((c) => (
+                            <Badge key={c} variant="outline" className="text-[10px] px-2 py-0.5">
+                              Sân {c}
+                            </Badge>
+                          ))
+                        ) : (
+                          <span className="text-xs text-muted-foreground">Chưa chọn sân</span>
+                        )}
+                      </div>
+                      {canEditSettings && (
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="ghost"
+                          className="h-7 px-2 rounded-lg text-[10px] gap-1 flex-shrink-0"
+                          onClick={openEditSettings}
+                        >
+                          <Pencil className="w-3 h-3" />
+                          Sửa
+                        </Button>
+                      )}
                     </div>
                   )}
                 </Card>
@@ -715,18 +810,45 @@ export function GameDetailScreen({ gameId, onClose, onChanged }: GameDetailScree
                     <Badge variant="secondary" className="rounded-full text-xs">
                       {game.players_count}/{game.max_players}
                     </Badge>
+                    {canEditSettings && (
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="ghost"
+                        className="h-6 w-6 p-0 rounded-full"
+                        onClick={openEditSettings}
+                        title="Sửa sân & số người"
+                      >
+                        <Pencil className="w-3 h-3" />
+                      </Button>
+                    )}
                   </div>
                 </div>
+
+                {canManagePlaceholders && game.players_count < game.max_players && (
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    className="w-full rounded-full text-xs mb-3 gap-1.5"
+                    onClick={openAddPlaceholder}
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    Thêm người tạm
+                  </Button>
+                )}
 
                 <div className="space-y-2">
                   {game.players.map((player) => {
                     const isThisHost = player.id === game.host?.id
                     const isThisCoHost = player.role === "co_host"
+                    const isPlaceholder = !!player.placeholder
                     const isMe = player.id === currentUserId
                     const stats = playerMatchCounts[player.id]
-                    const canKickThis = canManage && !isThisHost && !isMe
+                    const canKickThis = canManage && !isThisHost && !isMe && !isPlaceholder
                       && (isHost || !isThisCoHost)
-                    const canPromoteThis = isHost && !isThisHost && !isMe
+                    const canPromoteThis = isHost && !isThisHost && !isMe && !isPlaceholder
+                    const canEditPlaceholder = canManagePlaceholders && isPlaceholder
                     const gameActive = game.status !== "finished" && game.status !== "cancelled"
                     return (
                       <div key={player.id} className="flex items-center gap-3">
@@ -787,6 +909,11 @@ export function GameDetailScreen({ gameId, onClose, onChanged }: GameDetailScree
                                 Co-host
                               </Badge>
                             )}
+                            {isPlaceholder && (
+                              <Badge variant="outline" className="text-[10px] px-1.5 border-muted-foreground/40">
+                                Tạm
+                              </Badge>
+                            )}
                             {canManage && stats && stats.played > 0 && (
                               <span className="text-[10px] font-semibold">
                                 <span className="text-muted-foreground">{stats.played} trận</span>
@@ -795,8 +922,28 @@ export function GameDetailScreen({ gameId, onClose, onChanged }: GameDetailScree
                               </span>
                             )}
                           </div>
-                          {gameActive && (canPromoteThis || canKickThis) && (
+                          {gameActive && (canPromoteThis || canKickThis || canEditPlaceholder) && (
                             <div className="flex items-center gap-0.5 ml-1">
+                              {canEditPlaceholder && (
+                                <>
+                                  <button
+                                    type="button"
+                                    onClick={() => openEditPlaceholder(player)}
+                                    className="p-1 rounded-full text-muted-foreground hover:text-primary hover:bg-primary/10 transition-colors"
+                                    title="Sửa người tạm"
+                                  >
+                                    <Pencil className="w-3.5 h-3.5" />
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleDeletePlaceholder(player.id, player.name)}
+                                    className="p-1 rounded-full text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
+                                    title="Xóa người tạm"
+                                  >
+                                    <Trash2 className="w-3.5 h-3.5" />
+                                  </button>
+                                </>
+                              )}
                               {canPromoteThis && (
                                 <button
                                   type="button"
@@ -1153,6 +1300,105 @@ export function GameDetailScreen({ gameId, onClose, onChanged }: GameDetailScree
           onFinished={handleMatchFinished}
         />
       )}
+
+      {game && (
+        <PlaceholderPlayerSheet
+          open={showPlaceholderSheet}
+          onOpenChange={setShowPlaceholderSheet}
+          gameId={game.id}
+          player={editingPlaceholder}
+          onSaved={() => {
+            loadGame(game.id)
+            onChanged?.()
+          }}
+        />
+      )}
+
+      <Sheet open={showEditSettings} onOpenChange={setShowEditSettings}>
+        <SheetContent side="bottom" className="rounded-t-3xl max-w-md mx-auto">
+          <SheetHeader>
+            <SheetTitle className="text-base">Sửa sân & số người</SheetTitle>
+          </SheetHeader>
+          <div className="space-y-5 pt-4 pb-6">
+            <div className="space-y-2">
+              <Label className="text-xs font-semibold">Chọn sân (bấm để bật/tắt)</Label>
+              <div className="grid grid-cols-4 gap-2">
+                {COURT_OPTIONS.map((court) => {
+                  const selected = editCourts.includes(court)
+                  return (
+                    <Button
+                      key={court}
+                      type="button"
+                      variant={selected ? "default" : "outline"}
+                      size="sm"
+                      className="rounded-xl h-9 text-xs"
+                      onClick={() => toggleEditCourt(court)}
+                    >
+                      Sân {court}
+                    </Button>
+                  )
+                })}
+              </div>
+              <p className="text-[10px] text-muted-foreground">
+                Bỏ chọn sân cũ rồi chọn sân mới (VD: tắt 1, 2 → bật 3, 4)
+              </p>
+              {editCourts.length === 0 && (
+                <p className="text-[10px] text-amber-600 dark:text-amber-400">
+                  Chọn ít nhất 1 sân trước khi lưu
+                </p>
+              )}
+            </div>
+
+            <div className="space-y-2">
+              <Label className="text-xs font-semibold">Số người tối đa</Label>
+              <div className="flex items-center justify-between bg-secondary rounded-2xl p-3">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="rounded-full w-10 h-10"
+                  disabled={editMaxPlayers <= Math.max(2, game?.players_count ?? 2)}
+                  onClick={() =>
+                    setEditMaxPlayers((n) => Math.max(game?.players_count ?? 2, n - 1))
+                  }
+                >
+                  <Minus className="w-4 h-4" />
+                </Button>
+                <span className="text-xl font-bold">{editMaxPlayers} người</span>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="rounded-full w-10 h-10"
+                  onClick={() => setEditMaxPlayers((n) => n + 1)}
+                >
+                  <Plus className="w-4 h-4" />
+                </Button>
+              </div>
+              {game && (
+                <p className="text-[10px] text-muted-foreground">
+                  Hiện có {game.players_count} người — không thể đặt dưới mức này
+                </p>
+              )}
+            </div>
+
+            {settingsError && (
+              <p className="text-xs text-destructive bg-destructive/10 rounded-lg px-3 py-2">
+                {settingsError}
+              </p>
+            )}
+
+            <Button
+              className="w-full rounded-full"
+              onClick={handleSaveSettings}
+              disabled={settingsSaving || editCourts.length === 0}
+            >
+              {settingsSaving ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
+              Lưu thay đổi
+            </Button>
+          </div>
+        </SheetContent>
+      </Sheet>
 
       <Sheet open={!!ratingPlayer} onOpenChange={(v) => !v && setRatingPlayer(null)}>
         <SheetContent side="bottom" className="rounded-t-3xl max-w-md mx-auto">

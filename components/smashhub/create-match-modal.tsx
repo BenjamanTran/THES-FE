@@ -17,6 +17,7 @@ interface CreateMatchModalProps {
   open: boolean
   onOpenChange: (open: boolean) => void
   onSuccess?: (game: Game) => void
+  initialVenue?: Venue | null
 }
 
 const skillLevels: SkillLevel[] = [
@@ -35,10 +36,18 @@ const timeSlots = [
   "14:00", "15:00", "16:00", "17:00", "18:00", "19:00", "20:00", "21:00", "22:00",
 ]
 
-export function CreateMatchModal({ open, onOpenChange, onSuccess }: CreateMatchModalProps) {
+const COURT_OPTIONS = Array.from({ length: 16 }, (_, i) => i + 1)
+
+function formatCourtList(courts: number[]) {
+  if (!courts.length) return "Chưa chọn sân"
+  return courts.map((c) => `Sân ${c}`).join(", ")
+}
+
+export function CreateMatchModal({ open, onOpenChange, onSuccess, initialVenue }: CreateMatchModalProps) {
   const [step, setStep] = useState(1)
   const [selectedVenue, setSelectedVenue] = useState<Venue | null>(null)
-  const [courtCount, setCourtCount] = useState(1)
+  const [selectedCourts, setSelectedCourts] = useState<number[]>([])
+  const [showVenuePicker, setShowVenuePicker] = useState(true)
   const [selectedDate, setSelectedDate] = useState<Date>(() => {
     const now = new Date()
     if (now.getHours() >= 22) now.setDate(now.getDate() + 1)
@@ -101,6 +110,21 @@ export function CreateMatchModal({ open, onOpenChange, onSuccess }: CreateMatchM
   }, [open, loadVenues])
 
   useEffect(() => {
+    if (!open || !initialVenue) return
+
+    setSelectedVenue(initialVenue)
+    setSelectedCourts([])
+    setShowVenuePicker(false)
+    setStep(1)
+    setCreatedGame(null)
+    setError(null)
+    setVenues((prev) =>
+      prev.some((v) => v.id === initialVenue.id) ? prev : [initialVenue, ...prev],
+    )
+    if (initialVenue.city) setDetectedCity(initialVenue.city)
+  }, [open, initialVenue])
+
+  useEffect(() => {
     if (!venueSearch) return
     const t = setTimeout(() => loadVenues(venueSearch), 300)
     return () => clearTimeout(t)
@@ -123,7 +147,7 @@ export function CreateMatchModal({ open, onOpenChange, onSuccess }: CreateMatchM
         lng: coords?.lng,
       })
       setVenues((prev) => [res.venue, ...prev])
-      setSelectedVenue(res.venue)
+      selectVenue(res.venue)
       setShowAddVenue(false)
       setNewVenueName("")
       setNewVenueAddress("")
@@ -144,6 +168,22 @@ export function CreateMatchModal({ open, onOpenChange, onSuccess }: CreateMatchM
     )
   }
 
+  const toggleCourt = (court: number) => {
+    setSelectedCourts((prev) =>
+      prev.includes(court)
+        ? prev.filter((c) => c !== court)
+        : [...prev, court].sort((a, b) => a - b),
+    )
+  }
+
+  const selectVenue = (venue: Venue) => {
+    setSelectedVenue((current) => {
+      if (current?.id !== venue.id) setSelectedCourts([])
+      return venue
+    })
+    setShowVenuePicker(false)
+  }
+
   const generateFbPost = (game: Game): string => {
     const start = new Date(game.start_time)
     const end = new Date(game.end_time)
@@ -161,7 +201,8 @@ export function CreateMatchModal({ open, onOpenChange, onSuccess }: CreateMatchM
       ? `🏸 Trình độ: ${levelLabels.join(" + ")}`
       : ""
 
-    const courtLine = `🏟️ ${courtCount} sân — tối đa ${game.max_players} người`
+    const courts = game.courts?.length ? game.courts : selectedCourts
+    const courtLine = `🏟️ ${formatCourtList(courts)} — tối đa ${game.max_players} người`
 
     let priceLine = ""
     if (game.min_price > 0 || game.max_price > 0) {
@@ -199,7 +240,7 @@ export function CreateMatchModal({ open, onOpenChange, onSuccess }: CreateMatchM
   }
 
   const handleSubmit = async () => {
-    if (!selectedVenue) return
+    if (!selectedVenue || selectedCourts.length === 0) return
     setSubmitting(true)
     setError(null)
 
@@ -227,7 +268,7 @@ export function CreateMatchModal({ open, onOpenChange, onSuccess }: CreateMatchM
         min_tier: minTier,
         max_tier: maxTier,
         max_players: maxPlayers,
-        courts: Array.from({ length: courtCount }, (_, i) => i + 1),
+        courts: selectedCourts,
         title: title.trim() || undefined,
         description: description || undefined,
         min_price: safeMin,
@@ -255,7 +296,8 @@ export function CreateMatchModal({ open, onOpenChange, onSuccess }: CreateMatchM
   const resetAndClose = () => {
     setStep(1)
     setSelectedVenue(null)
-    setCourtCount(1)
+    setSelectedCourts([])
+    setShowVenuePicker(true)
     setMatchType("doubles")
     setMaxPlayers(8)
     setSelectedLevels(["newbie", "beginner_plus"])
@@ -384,9 +426,64 @@ export function CreateMatchModal({ open, onOpenChange, onSuccess }: CreateMatchM
             </div>
           )}
 
-          {/* Step 1: Venue Selection */}
+          {/* Step 1: Venue + courts */}
           {!createdGame && step === 1 && (
             <div className="space-y-4">
+              {selectedVenue && !showVenuePicker && (
+                <>
+                  <Card className="p-4 rounded-2xl border-primary/30 bg-primary/5 space-y-3">
+                    <Label className="text-sm font-semibold block">Chọn sân (bấm để bật/tắt)</Label>
+                    <div className="grid grid-cols-4 gap-2">
+                      {COURT_OPTIONS.map((court) => {
+                        const selected = selectedCourts.includes(court)
+                        return (
+                          <Button
+                            key={court}
+                            type="button"
+                            variant={selected ? "default" : "outline"}
+                            size="sm"
+                            className="rounded-xl h-9 text-xs"
+                            onClick={() => toggleCourt(court)}
+                          >
+                            Sân {court}
+                          </Button>
+                        )
+                      })}
+                    </div>
+                    {selectedCourts.length === 0 ? (
+                      <p className="text-[10px] text-amber-600 dark:text-amber-400">
+                        Chọn ít nhất 1 sân, sau đó bấm Tiếp theo bên dưới
+                      </p>
+                    ) : (
+                      <p className="text-[10px] text-muted-foreground">
+                        Đã chọn: {formatCourtList(selectedCourts)}
+                      </p>
+                    )}
+                  </Card>
+
+                  <Card className="p-3 rounded-2xl border-border/50 flex items-center gap-3">
+                    <MapPin className="w-4 h-4 text-primary flex-shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-semibold truncate">{selectedVenue.name}</p>
+                      {selectedVenue.address && (
+                        <p className="text-[10px] text-muted-foreground truncate">{selectedVenue.address}</p>
+                      )}
+                    </div>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="rounded-full text-[10px] h-7 px-2.5 flex-shrink-0"
+                      onClick={() => setShowVenuePicker(true)}
+                    >
+                      Đổi
+                    </Button>
+                  </Card>
+                </>
+              )}
+
+              {(showVenuePicker || !selectedVenue) && (
+                <>
               {/* City toggle + Search */}
               <div className="flex items-center gap-2">
                 {["HCM", "HN", ""].map((c) => (
@@ -422,7 +519,7 @@ export function CreateMatchModal({ open, onOpenChange, onSuccess }: CreateMatchM
                   <div className="h-20 rounded-2xl bg-muted/30" />
                 </div>
               ) : (
-                <div className="space-y-2">
+                <div className="space-y-2 max-h-[38vh] overflow-y-auto pr-0.5">
                   {filteredVenues.map((venue) => (
                     <Card
                       key={venue.id}
@@ -432,7 +529,7 @@ export function CreateMatchModal({ open, onOpenChange, onSuccess }: CreateMatchM
                           ? "border-primary bg-primary/5" 
                           : "border-border/50 hover:border-primary/30"
                       )}
-                      onClick={() => setSelectedVenue(venue)}
+                      onClick={() => selectVenue(venue)}
                     >
                       <div className="flex items-center justify-between">
                         <div>
@@ -522,30 +619,7 @@ export function CreateMatchModal({ open, onOpenChange, onSuccess }: CreateMatchM
                 </Card>
               )}
 
-              {/* Court count */}
-              {selectedVenue && (
-                <div className="pt-4 border-t border-border/20">
-                  <Label className="text-sm font-semibold mb-3 block">Số sân đặt</Label>
-                  <div className="flex items-center justify-between bg-secondary rounded-2xl p-3">
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="rounded-full w-10 h-10"
-                      onClick={() => setCourtCount(Math.max(1, courtCount - 1))}
-                    >
-                      <Minus className="w-4 h-4" />
-                    </Button>
-                    <span className="text-xl font-bold">{courtCount} sân</span>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="rounded-full w-10 h-10"
-                      onClick={() => setCourtCount(courtCount + 1)}
-                    >
-                      <Plus className="w-4 h-4" />
-                    </Button>
-                  </div>
-                </div>
+                </>
               )}
             </div>
           )}
@@ -842,7 +916,7 @@ export function CreateMatchModal({ open, onOpenChange, onSuccess }: CreateMatchM
                   </div>
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">Sân</span>
-                    <span className="font-medium">{courtCount} sân</span>
+                    <span className="font-medium text-right max-w-[60%]">{formatCourtList(selectedCourts)}</span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">Ngày</span>
@@ -905,7 +979,7 @@ export function CreateMatchModal({ open, onOpenChange, onSuccess }: CreateMatchM
             <Button
               className="flex-1 rounded-full"
               onClick={handleNext}
-              disabled={(step === 1 && !selectedVenue) || submitting}
+              disabled={(step === 1 && (!selectedVenue || selectedCourts.length === 0)) || submitting}
             >
               {submitting && <Loader2 className="w-4 h-4 animate-spin mr-2" />}
               {submitting ? "Đang tạo..." : step === 3 ? "Tạo trận đấu" : "Tiếp theo"}

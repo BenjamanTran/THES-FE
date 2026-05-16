@@ -45,10 +45,10 @@ export function EditProfileSheet({ open, onOpenChange }: EditProfileSheetProps) 
   const [name, setName] = useState(user?.name ?? "")
   const [phone, setPhone] = useState(user?.phone ?? "")
   const [gender, setGender] = useState<Gender>(user?.gender ?? "unspecified")
-  const [tier, setTier] = useState<Tier>(user?.rank?.tier ?? "newbie")
+  const declared = user?.declared_rank ?? user?.rank
+  const [tier, setTier] = useState<Tier>(declared?.tier ?? "newbie")
   const [stars, setStars] = useState(() => {
-    const r = user?.rank
-    return r ? ratingToStars(r.tier, r.rating) : 3
+    return declared ? ratingToStars(declared.tier, declared.rating) : 3
   })
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -59,8 +59,9 @@ export function EditProfileSheet({ open, onOpenChange }: EditProfileSheetProps) 
       setName(user.name)
       setPhone(user.phone ?? "")
       setGender(user.gender ?? "unspecified")
-      setTier(user.rank?.tier ?? "newbie")
-      setStars(user.rank ? ratingToStars(user.rank.tier, user.rank.rating) : 3)
+      const d = user.declared_rank ?? user.rank
+      setTier(d?.tier ?? "newbie")
+      setStars(d ? ratingToStars(d.tier, d.rating) : 3)
       setError(null)
     }
     onOpenChange(next)
@@ -155,9 +156,9 @@ export function EditProfileSheet({ open, onOpenChange }: EditProfileSheetProps) 
           <div className="space-y-1.5">
             <div className="flex items-center justify-between">
               <Label className="text-xs">Trình độ tự đánh giá</Label>
-              {user.rank && (
+              {(user.declared_rank ?? user.rank) && (
                 <span className="text-[11px] text-muted-foreground">
-                  Hiện tại: {user.rank.display_name}
+                  Hiện tại: {(user.declared_rank ?? user.rank)!.display_name}
                 </span>
               )}
             </div>
