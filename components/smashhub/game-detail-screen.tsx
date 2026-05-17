@@ -31,6 +31,7 @@ import {
   Pencil,
   Copy,
   Minus,
+  ChevronDown,
 } from "lucide-react"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Badge } from "@/components/ui/badge"
@@ -40,6 +41,7 @@ import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/compone
 import { SkillBadge, SKILL_LABELS, skillColors, type SkillLevel } from "./skill-badge"
 import { GenderIcon } from "./gender-icon"
 import { CreateMatchSheet } from "./create-match-sheet"
+import { GameMatchCard } from "./game-match-card"
 import { PlaceholderPlayerSheet } from "./placeholder-player-sheet"
 import { ScoreEntryModal } from "./score-entry-modal"
 import {
@@ -565,6 +567,16 @@ export function GameDetailScreen({ gameId, onClose, onChanged }: GameDetailScree
     return counts
   }, [game?.matches])
 
+  const [showFinishedMatches, setShowFinishedMatches] = useState(false)
+
+  const { activeMatches, finishedMatches } = useMemo(() => {
+    const all = game?.matches ?? []
+    return {
+      activeMatches: all.filter((m) => m.status !== "finished"),
+      finishedMatches: all.filter((m) => m.status === "finished"),
+    }
+  }, [game?.matches])
+
   const fitInfo = fitMeta(game?.fit_level)
 
   return (
@@ -1055,183 +1067,58 @@ export function GameDetailScreen({ gameId, onClose, onChanged }: GameDetailScree
                     </p>
                   ) : (
                     <div className="space-y-2">
-                      {game.matches.map((match) => {
-                        const isPending = match.status === "pending"
-                        const isOngoing = match.status === "ongoing"
-                        const isFinished = match.status === "finished"
-                        const canFinishThis = isParticipant && isOngoing
-                        const statusBadge = isFinished
-                          ? { label: "Kết thúc", cls: "bg-neutral-500/20 text-neutral-300 border-neutral-500/30" }
-                          : isOngoing
-                            ? { label: "Đang chơi", cls: "bg-emerald-500/20 text-emerald-400 border-emerald-500/30" }
-                            : { label: "Chờ bắt đầu", cls: "bg-amber-500/20 text-amber-400 border-amber-500/30" }
-                        return (
-                          <div
-                            key={match.id}
-                            className={`min-w-0 overflow-hidden p-3 rounded-xl border ${
-                              isFinished
-                                ? "border-border/30 bg-secondary/30"
-                                : isOngoing
-                                  ? "border-emerald-500/20 bg-emerald-500/5"
-                                  : "border-amber-500/20 bg-amber-500/5"
-                            }`}
+                      {activeMatches.map((match) => (
+                        <GameMatchCard
+                          key={match.id}
+                          match={match}
+                          game={game}
+                          canManage={canManage}
+                          isGameTime={isGameTime}
+                          isParticipant={isParticipant}
+                          startingMatchId={startingMatchId}
+                          deletingMatchId={deletingMatchId}
+                          onStartMatch={handleStartMatch}
+                          onFinish={setFinishingMatch}
+                          onEdit={openEditMatch}
+                          onDelete={handleDeleteMatch}
+                        />
+                      ))}
+                      {finishedMatches.length > 0 && (
+                        <>
+                          <button
+                            type="button"
+                            className="flex w-full items-center justify-between gap-2 rounded-xl border border-border/40 bg-secondary/20 px-3 py-2.5 text-xs text-muted-foreground hover:bg-secondary/40 transition-colors"
+                            onClick={() => setShowFinishedMatches((v) => !v)}
                           >
-                            <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-1.5 mb-2">
-                              <div className="flex items-center gap-2 min-w-0">
-                                <span className="text-xs font-semibold text-muted-foreground">
-                                  Trận {match.match_number}
-                                </span>
-                                <Badge
-                                  variant="outline"
-                                  className={`text-[10px] px-1.5 py-0 rounded-full shrink-0 ${statusBadge.cls}`}
-                                >
-                                  {statusBadge.label}
-                                </Badge>
-                              </div>
-                              <div className="flex items-center gap-1.5 flex-shrink-0">
-                                {canManage && isPending && isGameTime && (
-                                  <Button
-                                    size="sm"
-                                    className="rounded-full text-xs h-7 px-3 bg-emerald-500 hover:bg-emerald-600 text-white"
-                                    onClick={() => handleStartMatch(match.id)}
-                                    disabled={startingMatchId === match.id}
-                                  >
-                                    {startingMatchId === match.id
-                                      ? <Loader2 className="w-3.5 h-3.5 mr-1 animate-spin" />
-                                      : <Play className="w-3.5 h-3.5 mr-1" />
-                                    }
-                                    Bắt đầu
-                                  </Button>
-                                )}
-                                {canFinishThis && (
-                                  <Button
-                                    size="sm"
-                                    className="rounded-full text-xs h-7 px-3 bg-amber-500 hover:bg-amber-600 text-white shadow-sm shadow-amber-500/30"
-                                    onClick={() => setFinishingMatch(match)}
-                                  >
-                                    <Flag className="w-3.5 h-3.5 mr-1" />
-                                    Kết thúc
-                                  </Button>
-                                )}
-                                {canManage && !isFinished && (
-                                  <Button
-                                    size="sm"
-                                    variant="ghost"
-                                    className="rounded-full h-7 w-7 p-0 text-muted-foreground hover:text-primary hover:bg-primary/10"
-                                    onClick={() => openEditMatch(match)}
-                                    title="Sửa trận"
-                                  >
-                                    <Pencil className="w-3.5 h-3.5" />
-                                  </Button>
-                                )}
-                                {canManage && !isFinished && (
-                                  <Button
-                                    size="sm"
-                                    variant="ghost"
-                                    className="rounded-full h-7 w-7 p-0 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
-                                    onClick={() => handleDeleteMatch(match.id)}
-                                    disabled={deletingMatchId === match.id}
-                                  >
-                                    {deletingMatchId === match.id
-                                      ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                                      : <Trash2 className="w-3.5 h-3.5" />
-                                    }
-                                  </Button>
-                                )}
-                              </div>
+                            <span className="font-medium text-foreground">
+                              Đã kết thúc ({finishedMatches.length})
+                            </span>
+                            <ChevronDown
+                              className={`w-4 h-4 shrink-0 transition-transform duration-200 ${showFinishedMatches ? "rotate-180" : ""}`}
+                            />
+                          </button>
+                          {showFinishedMatches && (
+                            <div className="space-y-2">
+                              {finishedMatches.map((match) => (
+                                <GameMatchCard
+                                  key={match.id}
+                                  match={match}
+                                  game={game}
+                                  canManage={canManage}
+                                  isGameTime={isGameTime}
+                                  isParticipant={isParticipant}
+                                  startingMatchId={startingMatchId}
+                                  deletingMatchId={deletingMatchId}
+                                  onStartMatch={handleStartMatch}
+                                  onFinish={setFinishingMatch}
+                                  onEdit={openEditMatch}
+                                  onDelete={handleDeleteMatch}
+                                />
+                              ))}
                             </div>
-
-                            <div className="space-y-2 min-w-0">
-                              <div className="min-w-0">
-                                <p className="text-[10px] text-muted-foreground mb-1 text-center">Team A</p>
-                                <div className="flex flex-wrap gap-1 justify-center">
-                                  {match.team_a.map((p) => {
-                                    const gp = game.players.find((pl) => pl.id === p.id)
-                                    const gender = p.gender ?? gp?.gender
-                                    const displayTier = gp?.host_rated_tier || p.rank?.tier
-                                    const displayStars = gp?.host_rated_tier && gp?.host_rated_stars
-                                      ? gp.host_rated_stars
-                                      : p.rank ? ratingToStars(p.rank.tier, p.rank.rating) : null
-                                    const tc = displayTier ? skillColors[displayTier] || skillColors.newbie : null
-                                    return (
-                                      <div key={p.id} className="flex flex-col items-center min-w-0 max-w-full">
-                                        <Badge
-                                          variant="secondary"
-                                          className="text-[10px] px-1.5 py-0 rounded-b-none max-w-[10rem] truncate text-center inline-flex items-center justify-center gap-0.5"
-                                          title={p.name || `#${p.id}`}
-                                        >
-                                          {p.name || `#${p.id}`}
-                                          {gender && <GenderIcon gender={gender} size="sm" />}
-                                        </Badge>
-                                        {displayTier && tc && (
-                                          <span className={`text-[9px] px-1.5 py-0 rounded-b-md ${tc.bg} ${tc.text} flex items-center justify-center gap-0.5 max-w-[10rem] truncate`}>
-                                            {SKILL_LABELS[displayTier as SkillLevel]} {displayStars}<Star className="w-2 h-2 fill-current shrink-0" />
-                                          </span>
-                                        )}
-                                      </div>
-                                    )
-                                  })}
-                                </div>
-                              </div>
-
-                              {isFinished && match.team_a_score != null && match.team_b_score != null ? (
-                                <div className="flex items-center justify-center gap-2 py-0.5">
-                                  <span className={`text-lg font-bold ${match.winner_team === "team_a" ? "text-amber-400" : "text-muted-foreground"}`}>
-                                    {match.team_a_score}
-                                  </span>
-                                  <span className="text-xs text-muted-foreground">–</span>
-                                  <span className={`text-lg font-bold ${match.winner_team === "team_b" ? "text-amber-400" : "text-muted-foreground"}`}>
-                                    {match.team_b_score}
-                                  </span>
-                                </div>
-                              ) : (
-                                <p className="text-center text-xs text-muted-foreground font-medium py-0.5">vs</p>
-                              )}
-
-                              <div className="min-w-0">
-                                <p className="text-[10px] text-muted-foreground mb-1 text-center">Team B</p>
-                                <div className="flex flex-wrap gap-1 justify-center">
-                                  {match.team_b.map((p) => {
-                                    const gp = game.players.find((pl) => pl.id === p.id)
-                                    const gender = p.gender ?? gp?.gender
-                                    const displayTier = gp?.host_rated_tier || p.rank?.tier
-                                    const displayStars = gp?.host_rated_tier && gp?.host_rated_stars
-                                      ? gp.host_rated_stars
-                                      : p.rank ? ratingToStars(p.rank.tier, p.rank.rating) : null
-                                    const tc = displayTier ? skillColors[displayTier] || skillColors.newbie : null
-                                    return (
-                                      <div key={p.id} className="flex flex-col items-center min-w-0 max-w-full">
-                                        <Badge
-                                          variant="secondary"
-                                          className="text-[10px] px-1.5 py-0 rounded-b-none max-w-[10rem] truncate text-center inline-flex items-center justify-center gap-0.5"
-                                          title={p.name || `#${p.id}`}
-                                        >
-                                          {p.name || `#${p.id}`}
-                                          {gender && <GenderIcon gender={gender} size="sm" />}
-                                        </Badge>
-                                        {displayTier && tc && (
-                                          <span className={`text-[9px] px-1.5 py-0 rounded-b-md ${tc.bg} ${tc.text} flex items-center justify-center gap-0.5 max-w-[10rem] truncate`}>
-                                            {SKILL_LABELS[displayTier as SkillLevel]} {displayStars}<Star className="w-2 h-2 fill-current shrink-0" />
-                                          </span>
-                                        )}
-                                      </div>
-                                    )
-                                  })}
-                                </div>
-                              </div>
-                            </div>
-
-                            {isFinished && match.winner_team && (
-                              <div className="flex items-center justify-center gap-1 mt-2 pt-2 border-t border-border/20">
-                                <Trophy className="w-3 h-3 text-amber-400" />
-                                <span className="text-[10px] text-amber-400 font-medium">
-                                  {match.winner_team === "team_a" ? "Team A" : "Team B"} thắng
-                                </span>
-                              </div>
-                            )}
-                          </div>
-                        )
-                      })}
+                          )}
+                        </>
+                      )}
                     </div>
                   )}
                 </Card>

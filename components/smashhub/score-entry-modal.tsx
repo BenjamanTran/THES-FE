@@ -3,7 +3,6 @@
 import { useState } from "react"
 import { Trophy, Loader2, AlertTriangle, Minus, Plus } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import { Badge } from "@/components/ui/badge"
 import { Card } from "@/components/ui/card"
 import {
   Dialog,
@@ -22,13 +21,10 @@ interface ScoreEntryModalProps {
   onFinished: (res: FinishMatchResponse) => void
 }
 
-type Step = "score" | "confirm"
-
 export function ScoreEntryModal({ open, onOpenChange, gameId, matchId, matchNumber, onFinished }: ScoreEntryModalProps) {
   const [scoreA, setScoreA] = useState(0)
   const [scoreB, setScoreB] = useState(0)
   const [winnerOverride, setWinnerOverride] = useState<"team_a" | "team_b" | null>(null)
-  const [step, setStep] = useState<Step>("score")
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -40,7 +36,6 @@ export function ScoreEntryModal({ open, onOpenChange, gameId, matchId, matchNumb
     setScoreA(0)
     setScoreB(0)
     setWinnerOverride(null)
-    setStep("score")
     setError(null)
     setLoading(false)
   }
@@ -64,7 +59,6 @@ export function ScoreEntryModal({ open, onOpenChange, gameId, matchId, matchNumb
       handleClose(false)
     } catch (err) {
       setError(err instanceof Error ? err.message : "Không thể kết thúc trận")
-      setStep("score")
     } finally {
       setLoading(false)
     }
@@ -104,8 +98,7 @@ export function ScoreEntryModal({ open, onOpenChange, gameId, matchId, matchNumb
           </p>
         </div>
 
-        {step === "score" && (
-          <div className="px-6 py-4 space-y-4">
+        <div className="px-6 py-4 space-y-4">
             <div className="grid grid-cols-2 gap-4">
               <ScoreInput
                 label="Team A"
@@ -144,95 +137,22 @@ export function ScoreEntryModal({ open, onOpenChange, gameId, matchId, matchNumb
               <Button
                 className="rounded-full"
                 disabled={!effectiveWinner || loading}
-                onClick={() => setStep("confirm")}
-              >
-                Xác nhận điểm
-              </Button>
-              <Button
-                variant="ghost"
-                className="rounded-full text-muted-foreground text-xs"
-                onClick={() => {
-                  if (window.confirm("Kết thúc trận không ghi điểm? Rating sẽ không thay đổi.")) {
-                    handleEndWithoutScores()
-                  }
-                }}
-                disabled={loading}
-              >
-                {loading ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : null}
-                Kết thúc không ghi điểm
-              </Button>
-            </div>
-          </div>
-        )}
-
-        {step === "confirm" && (
-          <div className="px-6 py-4 space-y-4">
-            <Card className="p-4 rounded-2xl border-border/50 text-center">
-              <p className="text-sm font-medium mb-3">Kết quả trận {matchNumber}</p>
-              <div className="flex items-center justify-center gap-6">
-                <div className="text-center">
-                  <p className="text-xs text-muted-foreground mb-1">Team A</p>
-                  <p className={`text-3xl font-bold ${effectiveWinner === "team_a" ? "text-amber-400" : "text-muted-foreground"}`}>
-                    {scoreA}
-                  </p>
-                  {effectiveWinner === "team_a" && (
-                    <Badge className="mt-1 bg-amber-500/20 text-amber-400 border-0 text-[10px]">
-                      <Trophy className="w-3 h-3 mr-0.5" />
-                      Thắng
-                    </Badge>
-                  )}
-                </div>
-                <span className="text-2xl font-bold text-muted-foreground">–</span>
-                <div className="text-center">
-                  <p className="text-xs text-muted-foreground mb-1">Team B</p>
-                  <p className={`text-3xl font-bold ${effectiveWinner === "team_b" ? "text-amber-400" : "text-muted-foreground"}`}>
-                    {scoreB}
-                  </p>
-                  {effectiveWinner === "team_b" && (
-                    <Badge className="mt-1 bg-amber-500/20 text-amber-400 border-0 text-[10px]">
-                      <Trophy className="w-3 h-3 mr-0.5" />
-                      Thắng
-                    </Badge>
-                  )}
-                </div>
-              </div>
-            </Card>
-
-            <Card className="p-3 rounded-2xl bg-amber-500/10 border-amber-500/30">
-              <div className="flex items-start gap-2">
-                <AlertTriangle className="w-4 h-4 text-amber-400 flex-shrink-0 mt-0.5" />
-                <p className="text-xs text-amber-400">
-                  Kết thúc trận? Hành động này không thể hoàn tác.
-                </p>
-              </div>
-            </Card>
-
-            {error && (
-              <Card className="p-3 rounded-2xl bg-destructive/10 border-destructive/30">
-                <p className="text-xs text-destructive">{error}</p>
-              </Card>
-            )}
-
-            <div className="flex gap-3">
-              <Button
-                variant="outline"
-                className="flex-1 rounded-full"
-                onClick={() => setStep("score")}
-                disabled={loading}
-              >
-                Quay lại
-              </Button>
-              <Button
-                className="flex-1 rounded-full"
                 onClick={handleSubmitWithScores}
-                disabled={loading}
               >
                 {loading ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : <Trophy className="w-4 h-4 mr-1" />}
                 Kết thúc
               </Button>
+              <Button
+                variant="ghost"
+                className="rounded-full text-muted-foreground text-xs"
+                onClick={handleEndWithoutScores}
+                disabled={loading}
+              >
+                Kết thúc không ghi điểm
+              </Button>
             </div>
           </div>
-        )}
+
       </DialogContent>
     </Dialog>
   )

@@ -52,7 +52,6 @@ export function CreateMatchSheet({
   const [teamB, setTeamB] = useState<number[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-
   const playerStats = useMemo(() => {
     const stats: Record<number, { played: number; wins: number; losses: number }> = {}
     for (const m of matches) {
@@ -140,14 +139,11 @@ export function CreateMatchSheet({
     const hasPartial = teamA.length > 0 || teamB.length > 0
     const isFull = teamA.length >= teamSize && teamB.length >= teamSize
 
+    const current = { teamA, teamB }
+
     if (isFull || !hasPartial) {
       const eligible = players.filter((p) => !inOngoingMatch.has(p.id))
-      const result = balanceTeams(
-        eligible.length >= teamSize * 2 ? eligible : players,
-        teamSize,
-        matchCounts,
-        genderMode,
-      )
+      const result = balanceTeams(eligible, teamSize, matchCounts, genderMode, 0, current)
       if (result.teamA.length < teamSize || result.teamB.length < teamSize) {
         setError(genderModeError(genderMode) || "Không đủ người chơi phù hợp để chia đội")
         return
@@ -157,7 +153,17 @@ export function CreateMatchSheet({
     } else {
       const locked = new Set([...teamA, ...teamB])
       const candidates = players.filter((p) => !locked.has(p.id) && !inOngoingMatch.has(p.id))
-      const result = fillSlots(teamA, teamB, teamSize, candidates, players, matchCounts, genderMode)
+      const result = fillSlots(
+        teamA,
+        teamB,
+        teamSize,
+        candidates,
+        players,
+        matchCounts,
+        genderMode,
+        0,
+        current,
+      )
       if (result.teamA.length < teamSize || result.teamB.length < teamSize) {
         setError(genderModeError(genderMode) || "Không đủ người chơi phù hợp để hoàn thành đội")
         return
@@ -165,6 +171,7 @@ export function CreateMatchSheet({
       setTeamA(result.teamA)
       setTeamB(result.teamB)
     }
+
   }
 
   const fairness = useMemo(() => {
@@ -382,6 +389,7 @@ export function CreateMatchSheet({
                     </Button>
                     <div className="flex-1 min-w-0 flex items-center gap-1.5">
                       <span className="text-xs font-medium truncate">{p.name || `#${p.id}`}</span>
+                      {p.gender && <GenderIcon gender={p.gender} size="sm" />}
                       <SkillBadge level={p.host_rated_tier || p.rank?.tier || null} size="xs" compact />
                       {(() => {
                         const stars = p.host_rated_tier && p.host_rated_stars
