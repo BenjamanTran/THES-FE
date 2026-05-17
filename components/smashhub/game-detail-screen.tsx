@@ -264,7 +264,12 @@ export function GameDetailScreen({ gameId, onClose, onChanged }: GameDetailScree
     return () => controller.abort()
   }, [game])
 
+  const MAX_CO_HOSTS = 4
   const isHost = game?.host?.id === currentUserId
+  const coHostCount = useMemo(
+    () => game?.players.filter((p) => p.role === "co_host").length ?? 0,
+    [game?.players],
+  )
   const isCoHost = useMemo(
     () => !!game?.players.some((p) => p.id === currentUserId && p.role === "co_host"),
     [game, currentUserId],
@@ -877,6 +882,7 @@ export function GameDetailScreen({ gameId, onClose, onChanged }: GameDetailScree
                     const canKickThis = canManage && !isThisHost && !isMe && !isPlaceholder
                       && (isHost || !isThisCoHost)
                     const canPromoteThis = isHost && !isThisHost && !isMe && !isPlaceholder
+                      && (isThisCoHost || coHostCount < MAX_CO_HOSTS)
                     const canEditPlaceholder = canManagePlaceholders && isPlaceholder
                     const gameActive = game.status !== "finished" && game.status !== "cancelled"
                     return (
