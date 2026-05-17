@@ -42,9 +42,9 @@ export const skillColors: Record<string, { bg: string; text: string; border: str
   professional: { bg: "bg-primary/20", text: "text-primary", border: "border-primary/30" },
 }
 
-const skillIcons: Record<string, string> = {
+export const SKILL_ICONS: Record<string, string> = {
   newbie: "🌱",
-  beginner_plus: "🎾",
+  beginner_plus: "🌼",
   lower_intermediate: "🏸",
   intermediate: "🏸",
   upper_intermediate: "🏸",
@@ -58,7 +58,7 @@ const UNRANKED_COLORS = { bg: "bg-neutral-500/20", text: "text-neutral-400", bor
 export function SkillBadge({ level, size = "md", showIcon = true, compact = false }: SkillBadgeProps) {
   const isUnranked = !level
   const colors = isUnranked ? UNRANKED_COLORS : (skillColors[level] || skillColors["newbie"])
-  const icon = isUnranked ? "—" : (skillIcons[level] || "🏸")
+  const icon = isUnranked ? "—" : (SKILL_ICONS[level] || "🏸")
   const label = isUnranked ? "Unranked" : (SKILL_LABELS[level as SkillLevel] || level)
   
   const sizeClasses = {
@@ -84,7 +84,11 @@ export function SkillBadge({ level, size = "md", showIcon = true, compact = fals
         "font-semibold border rounded-full whitespace-nowrap"
       )}
     >
-      {showIcon && !compact && <span className="mr-1">{icon}</span>}
+      {showIcon && (
+        <span className={cn("shrink-0 leading-none", compact ? "mr-0.5 text-[10px]" : "mr-1")}>
+          {icon}
+        </span>
+      )}
       {label}
     </Badge>
   )
