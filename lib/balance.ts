@@ -1,5 +1,5 @@
 import type { GamePlayer } from "./api"
-import { ratingFromTierAndStars } from "./rating-stars"
+import { ratingFromTierAndStars, ratingToStars } from "./rating-stars"
 
 const DEFAULT_RATING = 200 // 3★ newbie
 
@@ -28,14 +28,26 @@ interface ScoredOption {
   diff: number
 }
 
+/** Same skill points as badges (tier + stars), not raw global rating alone. */
 function getRating(player: GamePlayer): number {
-  if (player.host_rated_tier && player.host_rated_stars) {
+  if (player.host_rated_tier && player.host_rated_stars != null) {
     return ratingFromTierAndStars(player.host_rated_tier, player.host_rated_stars)
   }
   if (player.placeholder && player.declared_rank) {
-    return player.declared_rank.rating
+    const { tier, rating } = player.declared_rank
+    return ratingFromTierAndStars(tier, ratingToStars(tier, rating))
   }
-  return player.rank?.rating ?? DEFAULT_RATING
+  if (player.rank) {
+    const { tier, rating } = player.rank
+    return ratingFromTierAndStars(tier, ratingToStars(tier, rating))
+  }
+  return DEFAULT_RATING
+}
+
+function effectiveTierKey(player: GamePlayer): string | null {
+  if (player.host_rated_tier) return player.host_rated_tier
+  if (player.placeholder && player.declared_rank) return player.declared_rank.tier
+  return player.rank?.tier ?? null
 }
 
 function shuffle<T>(arr: T[]): T[] {
@@ -502,12 +514,56 @@ function bestSumFor(ids: number[], ratingMap: Map<number, number>): number {
   return ids.reduce((s, id) => s + (ratingMap.get(id) ?? DEFAULT_RATING), 0)
 }
 
+/** @deprecated Use lineupSkillGap for match editor warnings. */
 export function hasWideSkillGap(players: GamePlayer[]): boolean {
-  const tiers = players
-    .map((p) => p.rank?.tier)
-    .filter((t) => t != null)
-    .map((t) => TIER_ORDER[t as string] ?? 0)
+  return lineupSkillGap([], [], players).showWarning
+}
 
-  if (tiers.length < 2) return false
-  return Math.max(...tiers) - Math.min(...tiers) >= 3
+export interface LineupSkillGapInfo {
+  showWarning: boolean
+  tierSpread: number
+  ratingSpread: number
+  minTier: string | null
+  maxTier: string | null
+}
+
+/** Warn only for players in this match lineup (not the whole lobby). */
+export function lineupSkillGap(
+  teamAIds: number[],
+  teamBIds: number[],
+  players: GamePlayer[],
+): LineupSkillGapInfo {
+  const ids = [...teamAIds, ...teamBIds]
+  if (ids.length < 2) {
+    return { showWarning: false, tierSpread: 0, ratingSpread: 0, minTier: null, maxTier: null }
+  }
+
+  const selected = ids
+    .map((id) => players.find((p) => p.id === id))
+    .filter((p): p is GamePlayer => p != null)
+
+  const tierIndices = selected
+    .map((p) => effectiveTierKey(p))
+    .filter((t): t is string => t != null)
+    .map((t) => TIER_ORDER[t] ?? 0)
+
+  const ratings = selected.map((p) => getRating(p))
+
+  const tierSpread =
+    tierIndices.length >= 2 ? Math.max(...tierIndices) - Math.min(...tierIndices) : 0
+  const ratingSpread =
+    ratings.length >= 2 ? Math.max(...ratings) - Math.min(...ratings) : 0
+
+  const minIdx = tierIndices.length ? Math.min(...tierIndices) : 0
+  const maxIdx = tierIndices.length ? Math.max(...tierIndices) : 0
+  const tierName = (idx: number) =>
+    Object.entries(TIER_ORDER).find(([, v]) => v === idx)?.[0] ?? null
+
+  return {
+    showWarning: tierSpread >= 3 || ratingSpread > 1200,
+    tierSpread,
+    ratingSpread,
+    minTier: tierName(minIdx),
+    maxTier: tierName(maxIdx),
+  }
 }

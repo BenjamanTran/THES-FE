@@ -1,6 +1,7 @@
 "use client"
 
-import { useCallback, useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { toast } from "sonner"
 import {
   ArrowLeft,
   Calendar,
@@ -31,7 +32,8 @@ import {
   Pencil,
   Copy,
   Minus,
-  ChevronDown,
+  Sun,
+  Moon,
 } from "lucide-react"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Badge } from "@/components/ui/badge"
@@ -42,15 +44,22 @@ import { SkillBadge, SKILL_LABELS, skillColors, type SkillLevel } from "./skill-
 import { GenderIcon } from "./gender-icon"
 import { CreateMatchSheet } from "./create-match-sheet"
 import { GameMatchCard } from "./game-match-card"
+import { NextMatchSuggest } from "./next-match-suggest"
+import { PriorityMatchBanner } from "./priority-match-banner"
 import { PlaceholderPlayerSheet } from "./placeholder-player-sheet"
 import { ScoreEntryModal } from "./score-entry-modal"
 import {
   fetchGame,
+  fetchMatches,
   updateGameSettings,
   joinGame,
   leaveGame,
   deleteMatch,
+  createMatch,
   startMatch,
+  toggleMatchPriority,
+  finishMatch,
+  undoFinishMatch,
   promoteCoHost,
   kickPlayer,
   deletePlaceholder,
@@ -72,15 +81,30 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { useAuth, useRequireAuth } from "@/lib/auth-context"
+import { useAppTheme } from "@/lib/theme-provider"
+import {
+  adjustSessionStatsForFinishedMatch,
+  matchCountsFromList,
+  maxSessionPlayed,
+  sessionMatchCountsFromPlayers,
+} from "@/lib/match-stats"
+import {
+  getMatchStartBlockers,
+  isMatchStartable,
+  suggestNextMatch,
+} from "@/lib/suggest-next-match"
+import { generateMatchBatchFair } from "@/lib/generate-match-batch"
+import { useGameCable } from "@/hooks/use-game-cable"
+import type { GameCableEvent } from "@/lib/game-cable"
 import { reverseGeocode } from "@/lib/geocode"
 import { formatPriceRange } from "@/lib/format"
+import { cn } from "@/lib/utils"
 import { format } from "date-fns"
 import { vi } from "date-fns/locale"
 
 interface GameDetailScreenProps {
   gameId: number | null
   onClose: () => void
-  onChanged?: () => void
 }
 
 function statusMeta(status: GameDetail["status"]) {
@@ -176,9 +200,12 @@ function avatarLabel(name: string | null) {
   return last.charAt(0).toUpperCase()
 }
 
-export function GameDetailScreen({ gameId, onClose, onChanged }: GameDetailScreenProps) {
+const UNDO_MS = 5000
+
+export function GameDetailScreen({ gameId, onClose }: GameDetailScreenProps) {
   const { user } = useAuth()
   const requireAuth = useRequireAuth()
+  const { theme, setTheme } = useAppTheme()
   const currentUserId = user?.id ?? -1
   const [game, setGame] = useState<GameDetail | null>(null)
   const [loading, setLoading] = useState(false)
@@ -211,22 +238,94 @@ export function GameDetailScreen({ gameId, onClose, onChanged }: GameDetailScree
 
   const COURT_OPTIONS = useMemo(() => Array.from({ length: 16 }, (_, i) => i + 1), [])
 
+  function mergePriorityIntoMatches(data: GameDetail): GameDetail {
+    const matches = [...(data.matches ?? [])]
+    const pm = data.priority_match
+    if (pm && pm.status === "pending" && !matches.some((m) => m.id === pm.id)) {
+      matches.push(pm)
+    }
+    return { ...data, matches }
+  }
+
+  const [matchTab, setMatchTab] = useState<"live" | "queue" | "done">("live")
+  const [matchesLoaded, setMatchesLoaded] = useState({ pending: false, finished: false })
+  const [tabMatchesLoading, setTabMatchesLoading] = useState(false)
+  const matchesLoadedRef = useRef(matchesLoaded)
+  matchesLoadedRef.current = matchesLoaded
+
+  const syncGameMatches = useCallback(
+    (prev: GameDetail, matches: MatchSummary[]): GameDetail => ({
+      ...prev,
+      matches,
+      match_counts: matchCountsFromList(matches, {
+        fallbackFinished: prev.match_counts?.finished,
+        finishedLoaded: matchesLoadedRef.current.finished,
+      }),
+    }),
+    [],
+  )
+
+  const mergeMatchesByStatus = useCallback(
+    (incoming: MatchSummary[], status: MatchSummary["status"]) => {
+      setGame((prev) => {
+        if (!prev) return prev
+        const rest = (prev.matches ?? []).filter((m) => m.status !== status)
+        const sorted = [...incoming].sort((a, b) =>
+          status === "finished" ? b.match_number - a.match_number : a.match_number - b.match_number,
+        )
+        return syncGameMatches(prev, [...rest, ...sorted])
+      })
+    },
+    [syncGameMatches],
+  )
+
+  const applyGameDetail = useCallback((data: GameDetail) => {
+    const merged = mergePriorityIntoMatches(data)
+    setGame(merged)
+    const hasPending = (merged.matches ?? []).some((m) => m.status === "pending")
+    const pendingCount = merged.match_counts?.pending ?? 0
+    setMatchesLoaded((s) => ({
+      ...s,
+      pending: hasPending || pendingCount > 0,
+    }))
+  }, [])
+
   const loadGame = useCallback(
     async (id: number) => {
+      const reloadFinished = matchesLoadedRef.current.finished
       setLoading(true)
       setError(null)
       setWarning(null)
       try {
         const data = await fetchGame(id)
-        setGame(data)
+        applyGameDetail(data)
+        if (reloadFinished) {
+          const { matches } = await fetchMatches(id, "finished")
+          mergeMatchesByStatus(matches, "finished")
+        }
       } catch (err) {
         setError(err instanceof Error ? err.message : "Không tải được trận đấu")
       } finally {
         setLoading(false)
       }
     },
-    [],
+    [applyGameDetail, mergeMatchesByStatus],
   )
+
+  const loadFinishedMatches = useCallback(async () => {
+    if (!game?.id || matchesLoadedRef.current.finished) return
+
+    setTabMatchesLoading(true)
+    try {
+      const { matches } = await fetchMatches(game.id, "finished")
+      mergeMatchesByStatus(matches, "finished")
+      setMatchesLoaded((s) => ({ ...s, finished: true }))
+    } catch {
+      toast.error("Không tải được trận đã xong")
+    } finally {
+      setTabMatchesLoading(false)
+    }
+  }, [game?.id, mergeMatchesByStatus])
 
   useEffect(() => {
     if (gameId === null) {
@@ -238,10 +337,36 @@ export function GameDetailScreen({ gameId, onClose, onChanged }: GameDetailScree
       setShowCreateMatch(false)
       setShowCreateMatchAutoBalance(false)
       setFinishingMatch(null)
+      setMatchesLoaded({ pending: false, finished: false })
       return
     }
-    loadGame(gameId)
-  }, [gameId, loadGame])
+    setMatchesLoaded({ pending: false, finished: false })
+    setMatchTab("live")
+    let cancelled = false
+    void (async () => {
+      setLoading(true)
+      setError(null)
+      setWarning(null)
+      try {
+        const data = await fetchGame(gameId)
+        if (cancelled) return
+        applyGameDetail(data)
+      } catch (err) {
+        if (!cancelled) {
+          setError(err instanceof Error ? err.message : "Không tải được trận đấu")
+        }
+      } finally {
+        if (!cancelled) setLoading(false)
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [gameId, applyGameDetail])
+
+  useEffect(() => {
+    if (matchTab === "done") void loadFinishedMatches()
+  }, [matchTab, game?.id, loadFinishedMatches])
 
   useEffect(() => {
     setResolvedAddress(null)
@@ -305,7 +430,6 @@ export function GameDetailScreen({ gameId, onClose, onChanged }: GameDetailScree
       const res = await joinGame(game.id)
       if (res.warning) setWarning(res.warning)
       await loadGame(game.id)
-      onChanged?.()
     } catch (err) {
       setError(err instanceof Error ? err.message : "Không thể tham gia")
     } finally {
@@ -325,7 +449,6 @@ export function GameDetailScreen({ gameId, onClose, onChanged }: GameDetailScree
     setError(null)
     try {
       await leaveGame(game.id)
-      onChanged?.()
       onClose()
     } catch (err) {
       setError(err instanceof Error ? err.message : "Không thể rời trận")
@@ -401,7 +524,6 @@ export function GameDetailScreen({ gameId, onClose, onChanged }: GameDetailScree
       })
       setGame(updated)
       setShowEditSettings(false)
-      onChanged?.()
     } catch (err) {
       setSettingsError(err instanceof Error ? err.message : "Không thể lưu thay đổi")
     } finally {
@@ -414,7 +536,6 @@ export function GameDetailScreen({ gameId, onClose, onChanged }: GameDetailScree
     setShowCreateMatchAutoBalance(false)
     setEditingMatch(null)
     if (game) loadGame(game.id)
-    onChanged?.()
   }
 
   const openEditMatch = (match: MatchSummary) => {
@@ -426,19 +547,162 @@ export function GameDetailScreen({ gameId, onClose, onChanged }: GameDetailScree
   const handleMatchFinished = (_res: FinishMatchResponse) => {
     setFinishingMatch(null)
     if (game) loadGame(game.id)
-    onChanged?.()
   }
 
   const [startingMatchId, setStartingMatchId] = useState<number | null>(null)
+  const [suggestActionLoading, setSuggestActionLoading] = useState(false)
+  const [batchLoading, setBatchLoading] = useState(false)
+  const [finishingMatchId, setFinishingMatchId] = useState<number | null>(null)
+  const [togglingPriorityId, setTogglingPriorityId] = useState<number | null>(null)
+  const patchMatchInGame = useCallback((updated: MatchSummary) => {
+    setGame((prev) => {
+      if (!prev) return prev
+      const prevMatch = (prev.matches ?? []).find((m) => m.id === updated.id)
+      let players = prev.players ?? []
+
+      if (
+        prevMatch?.status === "finished" &&
+        updated.status !== "finished" &&
+        prevMatch.winner_team
+      ) {
+        players = adjustSessionStatsForFinishedMatch(players, prevMatch, -1)
+      } else if (
+        updated.status === "finished" &&
+        prevMatch?.status !== "finished" &&
+        updated.winner_team
+      ) {
+        players = adjustSessionStatsForFinishedMatch(players, updated, 1)
+      } else if (
+        prevMatch?.status === "finished" &&
+        updated.status === "finished" &&
+        prevMatch.winner_team &&
+        updated.winner_team &&
+        prevMatch.winner_team !== updated.winner_team
+      ) {
+        players = adjustSessionStatsForFinishedMatch(players, prevMatch, -1)
+        players = adjustSessionStatsForFinishedMatch(players, updated, 1)
+      }
+
+      const matches = (prev.matches ?? []).map((m) => {
+        if (m.id === updated.id) return { ...m, ...updated }
+        if (updated.priority && updated.status === "pending") return { ...m, priority: false }
+        return m
+      })
+      const hasMatch = matches.some((m) => m.id === updated.id)
+      const nextMatches =
+        hasMatch || updated.status !== "pending"
+          ? matches
+          : [...matches, updated]
+      const next = syncGameMatches(prev, nextMatches)
+      return {
+        ...next,
+        players,
+        priority_match:
+          updated.priority && updated.status === "pending"
+            ? updated
+            : prev.priority_match?.id === updated.id
+              ? null
+              : prev.priority_match,
+      }
+    })
+  }, [syncGameMatches])
+
+  const handleCableEvent = useCallback(
+    (payload: GameCableEvent) => {
+      if (payload.event === "match.deleted") {
+        setGame((prev) => {
+          if (!prev?.matches) return prev
+          return syncGameMatches(
+            prev,
+            prev.matches.filter((m) => m.id !== payload.match_id),
+          )
+        })
+        return
+      }
+      if ("match" in payload && payload.match) {
+        patchMatchInGame(payload.match)
+      }
+    },
+    [patchMatchInGame, syncGameMatches],
+  )
+
+  useGameCable(gameId, handleCableEvent, open && gameId != null)
+
+  const handleTapWinner = async (match: MatchSummary, team: "team_a" | "team_b") => {
+    if (!game || finishingMatchId != null) return
+
+    const previous = { ...match }
+    const optimistic: MatchSummary = {
+      ...match,
+      status: "finished",
+      winner_team: team,
+      finished_at: new Date().toISOString(),
+    }
+    patchMatchInGame(optimistic)
+    setFinishingMatchId(match.id)
+
+    const teamLabel = team === "team_a" ? "Team A" : "Team B"
+
+    try {
+      const res = await finishMatch(game.id, match.id, { winner_team: team })
+      patchMatchInGame(res.match)
+
+      const toastId = toast.success(`${teamLabel} thắng`, {
+        duration: UNDO_MS,
+        action: {
+          label: "Hoàn tác",
+          onClick: () => void handleUndoFinish(match.id, toastId),
+        },
+      })
+    } catch (err) {
+      patchMatchInGame(previous)
+      toast.error(err instanceof Error ? err.message : "Không thể kết thúc trận")
+    } finally {
+      setFinishingMatchId(null)
+    }
+  }
+
+  const handleUndoFinish = async (matchId: number, toastId?: string | number) => {
+    if (!game) return
+    if (toastId != null) toast.dismiss(toastId)
+
+    try {
+      const res = await undoFinishMatch(game.id, matchId)
+      patchMatchInGame(res.match as MatchSummary)
+      toast.message("Đã hoàn tác")
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Không thể hoàn tác")
+      await loadGame(game.id)
+    }
+  }
+
   const handleStartMatch = async (matchId: number) => {
     if (!game) return
+    const match = game.matches?.find((m) => m.id === matchId)
+    const ongoing = (game.matches ?? []).filter((m) => m.status === "ongoing")
+    const playersNeeded = game.match_type === "singles" ? 2 : 4
+    const busyIds = new Set(
+      ongoing.flatMap((m) => [...m.team_a, ...m.team_b].map((p) => p.id)),
+    )
+    if (match && !isMatchStartable(match, busyIds, playersNeeded)) {
+      const blockers = getMatchStartBlockers(match, ongoing)
+      if (blockers.length > 0) {
+        const who = [...new Set(blockers.map((b) => b.playerName))].join(", ")
+        const on = [...new Set(blockers.map((b) => `#${b.ongoingMatchNumber}`))].join(", ")
+        toast.error(`${who} đang đấu ${on} — chờ họ xong rồi bắt đầu trận này`)
+        return
+      }
+      toast.error(
+        `Chưa đủ ${playersNeeded} người trong trận — sửa đội hình trước khi bắt đầu`,
+      )
+      return
+    }
     setStartingMatchId(matchId)
     try {
-      await startMatch(game.id, matchId)
-      loadGame(game.id)
-      onChanged?.()
-    } catch {
-      // silently ignore
+      const updated = await startMatch(game.id, matchId)
+      patchMatchInGame(updated as MatchSummary)
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Không thể bắt đầu trận")
     } finally {
       setStartingMatchId(null)
     }
@@ -450,8 +714,13 @@ export function GameDetailScreen({ gameId, onClose, onChanged }: GameDetailScree
     setDeletingMatchId(matchId)
     try {
       await deleteMatch(game.id, matchId)
-      loadGame(game.id)
-      onChanged?.()
+      setGame((prev) => {
+        if (!prev?.matches) return prev
+        return syncGameMatches(
+          prev,
+          prev.matches.filter((m) => m.id !== matchId),
+        )
+      })
     } catch {
       // silently ignore
     } finally {
@@ -475,7 +744,6 @@ export function GameDetailScreen({ gameId, onClose, onChanged }: GameDetailScree
     try {
       await kickPlayer(game.id, userId)
       loadGame(game.id)
-      onChanged?.()
     } catch {
       // silently ignore
     }
@@ -497,7 +765,6 @@ export function GameDetailScreen({ gameId, onClose, onChanged }: GameDetailScree
     try {
       await deletePlaceholder(game.id, userId)
       loadGame(game.id)
-      onChanged?.()
     } catch {
       // silently ignore
     }
@@ -538,9 +805,17 @@ export function GameDetailScreen({ gameId, onClose, onChanged }: GameDetailScree
   const hasEnoughPlayers = joinedPlayerCount >= minPlayersForMatch
   const gameAllowsMatches =
     game?.status === "open" || game?.status === "full" || game?.status === "ongoing"
-  const canCreateMatch = canManage && gameAllowsMatches && hasEnoughPlayers
-  const showMatchesSection =
-    gameAllowsMatches || (game?.matches != null && game.matches.length > 0)
+  const canPlanMatches = canManage && gameAllowsMatches && hasEnoughPlayers
+  const canCreateMatch = canPlanMatches
+  const totalMatchCount = useMemo(() => {
+    const c = matchCountsFromList(game?.matches, {
+      fallbackFinished: game?.match_counts?.finished,
+      finishedLoaded: matchesLoaded.finished,
+    })
+    return c.pending + c.ongoing + c.finished
+  }, [game?.matches, game?.match_counts?.finished, matchesLoaded.finished])
+
+  const showMatchesSection = gameAllowsMatches || totalMatchCount > 0
 
   const isGameTime = useMemo(() => {
     if (!game) return false
@@ -552,35 +827,195 @@ export function GameDetailScreen({ gameId, onClose, onChanged }: GameDetailScree
     return now >= start && now <= end
   }, [game])
 
-  const playerMatchCounts = useMemo(() => {
-    const counts: Record<number, { played: number; wins: number; losses: number }> = {}
-    if (!game?.matches) return counts
-    for (const match of game.matches) {
-      const allPlayers = [...(match.team_a || []), ...(match.team_b || [])]
-      for (const p of allPlayers) {
-        if (!counts[p.id]) counts[p.id] = { played: 0, wins: 0, losses: 0 }
-        counts[p.id].played += 1
-        if (match.status === "finished" && match.winner_team) {
-          const inTeamA = match.team_a.some((t) => t.id === p.id)
-          const inTeamB = match.team_b.some((t) => t.id === p.id)
-          const won = (match.winner_team === "team_a" && inTeamA) || (match.winner_team === "team_b" && inTeamB)
-          if (won) counts[p.id].wins += 1
-          else counts[p.id].losses += 1
-        }
-      }
-    }
-    return counts
-  }, [game?.matches])
+  const playerMatchCounts = useMemo(
+    () => sessionMatchCountsFromPlayers(game?.players ?? []),
+    [game?.players],
+  )
+  const maxPlayed = useMemo(() => maxSessionPlayed(playerMatchCounts), [playerMatchCounts])
 
-  const [showFinishedMatches, setShowFinishedMatches] = useState(false)
+  const sortedPlayers = useMemo(() => {
+    if (!game?.players) return []
+    return [...game.players].sort((a, b) => {
+      const ca = playerMatchCounts[a.id]?.played ?? 0
+      const cb = playerMatchCounts[b.id]?.played ?? 0
+      if (ca !== cb) return cb - ca
+      return (a.name || "").localeCompare(b.name || "", "vi")
+    })
+  }, [game?.players, playerMatchCounts])
 
-  const { activeMatches, finishedMatches } = useMemo(() => {
+  const { ongoingMatches, pendingMatches, finishedMatches } = useMemo(() => {
     const all = game?.matches ?? []
     return {
-      activeMatches: all.filter((m) => m.status !== "finished"),
-      finishedMatches: all.filter((m) => m.status === "finished"),
+      ongoingMatches: all.filter((m) => m.status === "ongoing"),
+      pendingMatches: all
+        .filter((m) => m.status === "pending")
+        .sort((a, b) => a.match_number - b.match_number),
+      finishedMatches: all
+        .filter((m) => m.status === "finished")
+        .sort((a, b) => b.match_number - a.match_number),
     }
   }, [game?.matches])
+
+  const tabMatchCounts = useMemo(
+    () =>
+      matchCountsFromList(game?.matches, {
+        fallbackFinished: game?.match_counts?.finished,
+        finishedLoaded: matchesLoaded.finished,
+      }),
+    [game?.matches, game?.match_counts?.finished, matchesLoaded.finished],
+  )
+
+  const busyPlayerIds = useMemo(
+    () =>
+      new Set(
+        ongoingMatches.flatMap((m) => [...m.team_a, ...m.team_b].map((p) => p.id)),
+      ),
+    [ongoingMatches],
+  )
+
+  const tabMatches =
+    matchTab === "live"
+      ? ongoingMatches
+      : matchTab === "queue"
+        ? pendingMatches
+        : finishedMatches
+
+  const matchListLimit =
+    matchTab === "live" ? Math.max(1, game?.courts?.length ?? 4) : null
+
+  const visibleTabMatches =
+    matchListLimit != null ? tabMatches.slice(0, matchListLimit) : tabMatches
+
+  const matchListScrollable = matchTab === "done" || matchTab === "queue"
+  const showTabListLoading =
+    tabMatchesLoading ||
+    (matchTab === "queue" &&
+      !matchesLoaded.pending &&
+      pendingMatches.length === 0 &&
+      (game?.match_counts?.pending ?? 0) > 0)
+
+  const playersNeeded = game?.match_type === "singles" ? 2 : 4
+
+  const priorityMatch = useMemo(() => {
+    if (!game) return null
+    if (game.priority_match?.status === "pending") return game.priority_match
+    return game.matches?.find((m) => m.status === "pending" && m.priority) ?? null
+  }, [game])
+
+  const priorityCanStart = useMemo(() => {
+    if (!priorityMatch || !isGameTime) return false
+    return isMatchStartable(priorityMatch, busyPlayerIds, playersNeeded)
+  }, [priorityMatch, busyPlayerIds, playersNeeded, isGameTime])
+
+  const priorityReason = useMemo(() => {
+    if (!priorityMatch || !game) return ""
+    if (!isGameTime) return "Host đánh dấu — bắt đầu được khi tới giờ trận"
+    if (priorityCanStart) return "Host đánh dấu — sẵn sàng lên sân"
+    const ongoing = (game.matches ?? []).filter((m) => m.status === "ongoing")
+    const blockers = getMatchStartBlockers(priorityMatch, ongoing)
+    if (blockers.length === 0) return "Host đánh dấu — chờ đủ người rảnh"
+    const who = [...new Set(blockers.map((b) => b.playerName))].join(", ")
+    const on = [...new Set(blockers.map((b) => `#${b.ongoingMatchNumber}`))].join(", ")
+    return `${who} đang đấu ${on}`
+  }, [priorityMatch, priorityCanStart, game, isGameTime])
+
+  const nextSuggestion = useMemo(() => {
+    if (!game || !canPlanMatches) return null
+    return suggestNextMatch(game, game.players ?? [], game.matches ?? [])
+  }, [game, canPlanMatches])
+
+  const hideSuggestForPriority =
+    priorityMatch &&
+    nextSuggestion?.kind === "start" &&
+    nextSuggestion.match.id === priorityMatch.id
+
+  const showNextSuggestion = nextSuggestion && !hideSuggestForPriority
+
+  const suggestedMatchId =
+    nextSuggestion?.kind === "start" ? nextSuggestion.match.id : priorityMatch?.id ?? null
+
+  const handleTogglePriority = async (match: MatchSummary) => {
+    if (!game) return
+    setTogglingPriorityId(match.id)
+    try {
+      const updated = await toggleMatchPriority(game.id, match.id)
+      patchMatchInGame({ ...updated, priority: !!updated.priority })
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Không thể đổi ưu tiên")
+    } finally {
+      setTogglingPriorityId(null)
+    }
+  }
+
+  const handleStartSuggested = async () => {
+    if (nextSuggestion?.kind !== "start") return
+    await handleStartMatch(nextSuggestion.match.id)
+    setMatchTab("live")
+  }
+
+  const handleCreateAndStartSuggested = async () => {
+    if (!game || nextSuggestion?.kind !== "create") return
+    setSuggestActionLoading(true)
+    try {
+      const created = await createMatch(game.id, {
+        team_a: nextSuggestion.teamA,
+        team_b: nextSuggestion.teamB,
+      })
+      await startMatch(game.id, created.id)
+      await loadGame(game.id)
+      setMatchTab("live")
+      toast.success("Đã tạo và bắt đầu trận")
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Không thể tạo trận")
+    } finally {
+      setSuggestActionLoading(false)
+    }
+  }
+
+  const handleQueueSuggested = async () => {
+    if (!game || nextSuggestion?.kind !== "queue") return
+    setSuggestActionLoading(true)
+    try {
+      await createMatch(game.id, {
+        team_a: nextSuggestion.teamA,
+        team_b: nextSuggestion.teamB,
+      })
+      await loadGame(game.id)
+      setMatchTab("queue")
+      toast.success("Đã thêm vào hàng chờ")
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Không thể thêm hàng chờ")
+    } finally {
+      setSuggestActionLoading(false)
+    }
+  }
+
+  const handleGenerateBatch = async (count: 5 | 10 | 15) => {
+    if (!game) return
+    setBatchLoading(true)
+    try {
+      const { created, errors } = await generateMatchBatchFair(
+        game,
+        game.players ?? [],
+        game.matches ?? [],
+        count,
+      )
+      await loadGame(game.id)
+      if (created > 0) {
+        setMatchTab("queue")
+        toast.success(`Đã xếp ${created} trận vào hàng chờ (cân bằng lượt)`)
+      }
+      if (errors.length > 0) {
+        toast.error(errors[0])
+      } else if (created === 0) {
+        toast.error("Không thể xếp thêm trận")
+      }
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Không thể xếp trận")
+    } finally {
+      setBatchLoading(false)
+    }
+  }
 
   const fitInfo = fitMeta(game?.fit_level)
 
@@ -603,7 +1038,34 @@ export function GameDetailScreen({ gameId, onClose, onChanged }: GameDetailScree
               <ArrowLeft className="w-5 h-5" />
             </Button>
             <h2 className="font-bold text-base">Chi tiết trận đấu</h2>
-            <div className="w-9" />
+            <div className="flex items-center gap-1 -mr-2">
+              <Button
+                variant="ghost"
+                size="icon"
+                className={cn(
+                  "rounded-full h-9 w-9",
+                  theme === "light" && "bg-primary/15 text-primary ring-1 ring-primary/30",
+                )}
+                onClick={() => setTheme("light")}
+                title="Chế độ sáng"
+                aria-pressed={theme === "light"}
+              >
+                <Sun className="w-5 h-5" />
+              </Button>
+              <Button
+                variant="ghost"
+                size="icon"
+                className={cn(
+                  "rounded-full h-9 w-9",
+                  theme === "dark" && "bg-primary/15 text-primary ring-1 ring-primary/30",
+                )}
+                onClick={() => setTheme("dark")}
+                title="Chế độ tối"
+                aria-pressed={theme === "dark"}
+              >
+                <Moon className="w-5 h-5" />
+              </Button>
+            </div>
           </div>
         </header>
 
@@ -873,7 +1335,7 @@ export function GameDetailScreen({ gameId, onClose, onChanged }: GameDetailScree
                 )}
 
                 <div className="space-y-2">
-                  {game.players.map((player) => {
+                  {sortedPlayers.map((player) => {
                     const isThisHost = player.id === game.host?.id
                     const isThisCoHost = player.role === "co_host"
                     const isPlaceholder = !!player.placeholder
@@ -949,11 +1411,23 @@ export function GameDetailScreen({ gameId, onClose, onChanged }: GameDetailScree
                                 Tạm
                               </Badge>
                             )}
-                            {canManage && stats && stats.played > 0 && (
-                              <span className="text-[10px] font-semibold">
-                                <span className="text-muted-foreground">{stats.played} trận</span>
-                                {stats.wins > 0 && <span className="text-emerald-400"> {stats.wins}W</span>}
-                                {stats.losses > 0 && <span className="text-red-400"> {stats.losses}L</span>}
+                            {stats != null && (
+                              <span className="text-[11px] font-bold tabular-nums">
+                                <span
+                                  className={
+                                    maxPlayed > 0 && stats.played < maxPlayed
+                                      ? "text-emerald-400"
+                                      : "text-foreground"
+                                  }
+                                >
+                                  {stats.played} trận
+                                </span>
+                                {canManage && stats.wins > 0 && (
+                                  <span className="text-emerald-400 font-semibold"> {stats.wins}W</span>
+                                )}
+                                {canManage && stats.losses > 0 && (
+                                  <span className="text-red-400 font-semibold"> {stats.losses}L</span>
+                                )}
                               </span>
                             )}
                           </div>
@@ -1042,38 +1516,120 @@ export function GameDetailScreen({ gameId, onClose, onChanged }: GameDetailScree
 
               {showMatchesSection && (
                 <Card
-                  className={`gap-3 min-w-0 overflow-hidden p-4 rounded-2xl border-border/50 ${isGameTime ? "order-1" : "order-20"}`}
+                  className={`min-w-0 p-0 gap-0 rounded-2xl border-border/50 ${isGameTime || canPlanMatches ? "order-1" : "order-20"}`}
                 >
-                  <div className="flex items-center justify-between gap-2 mb-3 min-w-0">
+                  <div className="flex items-center justify-between gap-2 px-4 pt-4 pb-2 min-w-0">
                     <div className="flex items-center gap-2 min-w-0">
                       <Swords className="w-4 h-4 text-primary shrink-0" />
                       <span className="text-sm font-semibold">Các trận đấu</span>
-                      {game.matches && game.matches.length > 0 && (
+                      {totalMatchCount > 0 && (
                         <Badge variant="secondary" className="rounded-full text-[10px]">
-                          {game.matches.length}
+                          {totalMatchCount}
                         </Badge>
                       )}
                     </div>
-                    {canCreateMatch && (
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        className="rounded-full text-xs h-7 px-2.5"
-                        onClick={() => setShowCreateMatch(true)}
-                      >
-                        <Plus className="w-3 h-3 mr-1" />
-                        Tạo trận
-                      </Button>
-                    )}
+                    <div className="flex items-center gap-1 shrink-0">
+                      {canCreateMatch && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="rounded-full text-xs h-7 px-2.5"
+                          onClick={() => setShowCreateMatch(true)}
+                        >
+                          <Plus className="w-3 h-3 mr-1" />
+                          Tạo trận
+                        </Button>
+                      )}
+                    </div>
                   </div>
 
-                  {(!game.matches || game.matches.length === 0) ? (
+                  {canPlanMatches && (priorityMatch || showNextSuggestion) && (
+                    <div className="sticky top-0 z-20 px-4 pb-2 bg-card/95 backdrop-blur-sm border-b border-border/30">
+                      {priorityMatch ? (
+                        <PriorityMatchBanner
+                          match={priorityMatch}
+                          reason={priorityReason}
+                          canStart={priorityCanStart}
+                          loading={
+                            startingMatchId === priorityMatch.id ||
+                            suggestActionLoading
+                          }
+                          onStart={() => void handleStartMatch(priorityMatch.id)}
+                        />
+                      ) : null}
+                      {showNextSuggestion ? (
+                      <NextMatchSuggest
+                        suggestion={nextSuggestion}
+                        isGameTime={isGameTime}
+                        loading={suggestActionLoading || startingMatchId != null}
+                        batchLoading={batchLoading}
+                        showBatchActions={pendingMatches.length <= 2}
+                        onStart={handleStartSuggested}
+                        onCreateAndStart={handleCreateAndStartSuggested}
+                        onQueue={handleQueueSuggested}
+                        onGenerateBatch={(n) => handleGenerateBatch(n)}
+                      />
+                      ) : null}
+                    </div>
+                  )}
+
+                  {totalMatchCount > 0 && (
+                    <div className="flex gap-1 mx-4 mb-2 p-0.5 rounded-lg bg-secondary/30">
+                      {(
+                        [
+                          { id: "live" as const, label: "Đang đấu", count: tabMatchCounts.ongoing },
+                          { id: "queue" as const, label: "Chờ", count: tabMatchCounts.pending },
+                          { id: "done" as const, label: "Xong", count: tabMatchCounts.finished },
+                        ] as const
+                      ).map((tab) => (
+                        <button
+                          key={tab.id}
+                          type="button"
+                          onClick={() => setMatchTab(tab.id)}
+                          className={cn(
+                            "flex-1 rounded-md py-1.5 text-[11px] font-medium transition-colors",
+                            matchTab === tab.id
+                              ? "bg-background text-foreground shadow-sm"
+                              : "text-muted-foreground hover:text-foreground",
+                          )}
+                        >
+                          {tab.label}
+                          {tab.count > 0 ? ` (${tab.count})` : ""}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+
+                  <div
+                    className={cn(
+                      "px-4 pb-4",
+                      matchListScrollable &&
+                        "max-h-[min(50vh,22rem)] overflow-y-auto overscroll-contain",
+                    )}
+                  >
+                  {totalMatchCount === 0 ? (
                     <p className="text-xs text-muted-foreground text-center py-4">
-                      Chưa có trận đấu nào. Host có thể tạo trận mới.
+                      Chưa có trận đấu nào. Host có thể tạo trận mới hoặc xếp hàng loạt.
+                    </p>
+                  ) : showTabListLoading ? (
+                    <div className="flex justify-center py-8">
+                      <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+                    </div>
+                  ) : tabMatches.length === 0 ? (
+                    <p className="text-xs text-muted-foreground text-center py-4">
+                      {matchTab === "live"
+                        ? "Chưa có trận đang đấu."
+                        : matchTab === "queue"
+                          ? tabMatchCounts.pending > 0
+                            ? "Đang tải hàng chờ…"
+                            : "Hàng chờ trống — dùng gợi ý hoặc Xếp 10/15."
+                          : tabMatchCounts.finished > 0
+                            ? "Đang tải trận đã xong…"
+                            : "Chưa có trận đã kết thúc."}
                     </p>
                   ) : (
-                    <div className="space-y-2">
-                      {activeMatches.map((match) => (
+                    <div className="space-y-1.5">
+                      {visibleTabMatches.map((match) => (
                         <GameMatchCard
                           key={match.id}
                           match={match}
@@ -1084,49 +1640,20 @@ export function GameDetailScreen({ gameId, onClose, onChanged }: GameDetailScree
                           startingMatchId={startingMatchId}
                           deletingMatchId={deletingMatchId}
                           onStartMatch={handleStartMatch}
-                          onFinish={setFinishingMatch}
+                          onTapWinner={handleTapWinner}
+                          onOpenScoreEntry={setFinishingMatch}
+                          finishingMatchId={finishingMatchId}
                           onEdit={openEditMatch}
                           onDelete={handleDeleteMatch}
+                          highlighted={suggestedMatchId === match.id}
+                          busyPlayerIds={busyPlayerIds}
+                          onTogglePriority={canManage ? handleTogglePriority : undefined}
+                          togglingPriorityId={togglingPriorityId}
                         />
                       ))}
-                      {finishedMatches.length > 0 && (
-                        <>
-                          <button
-                            type="button"
-                            className="flex w-full items-center justify-between gap-2 rounded-xl border border-border/40 bg-secondary/20 px-3 py-2.5 text-xs text-muted-foreground hover:bg-secondary/40 transition-colors"
-                            onClick={() => setShowFinishedMatches((v) => !v)}
-                          >
-                            <span className="font-medium text-foreground">
-                              Đã kết thúc ({finishedMatches.length})
-                            </span>
-                            <ChevronDown
-                              className={`w-4 h-4 shrink-0 transition-transform duration-200 ${showFinishedMatches ? "rotate-180" : ""}`}
-                            />
-                          </button>
-                          {showFinishedMatches && (
-                            <div className="space-y-2">
-                              {finishedMatches.map((match) => (
-                                <GameMatchCard
-                                  key={match.id}
-                                  match={match}
-                                  game={game}
-                                  canManage={canManage}
-                                  isGameTime={isGameTime}
-                                  isParticipant={isParticipant}
-                                  startingMatchId={startingMatchId}
-                                  deletingMatchId={deletingMatchId}
-                                  onStartMatch={handleStartMatch}
-                                  onFinish={setFinishingMatch}
-                                  onEdit={openEditMatch}
-                                  onDelete={handleDeleteMatch}
-                                />
-                              ))}
-                            </div>
-                          )}
-                        </>
-                      )}
                     </div>
                   )}
+                  </div>
                 </Card>
               )}
 
@@ -1236,10 +1763,7 @@ export function GameDetailScreen({ gameId, onClose, onChanged }: GameDetailScree
           onOpenChange={setShowPlaceholderSheet}
           gameId={game.id}
           player={editingPlaceholder}
-          onSaved={() => {
-            loadGame(game.id)
-            onChanged?.()
-          }}
+          onSaved={() => loadGame(game.id)}
         />
       )}
 

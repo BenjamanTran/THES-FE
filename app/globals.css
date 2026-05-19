@@ -53,33 +53,37 @@
 }
 
 .dark {
-  /* SmashHub Pro Dark Theme - Gray Tone */
-  --background: oklch(0.21 0 0);
-  --foreground: oklch(0.985 0 0);
-  --card: oklch(0.26 0 0);
-  --card-foreground: oklch(0.985 0 0);
-  --popover: oklch(0.26 0 0);
-  --popover-foreground: oklch(0.985 0 0);
+  /* SmashHub Pro Dark — higher contrast for outdoor glances */
+  --background: oklch(0.14 0 0);
+  --foreground: oklch(0.99 0 0);
+  --card: oklch(0.20 0 0);
+  --card-foreground: oklch(0.99 0 0);
+  --popover: oklch(0.20 0 0);
+  --popover-foreground: oklch(0.99 0 0);
 
-  /* Primary: Smash Orange */
-  --primary: oklch(0.68 0.19 45);
-  --primary-foreground: oklch(1 0 0);
+  --primary: oklch(0.72 0.20 45);
+  --primary-foreground: oklch(0.12 0 0);
 
-  --secondary: oklch(0.30 0 0);
-  --secondary-foreground: oklch(0.985 0 0);
+  --secondary: oklch(0.24 0 0);
+  --secondary-foreground: oklch(0.99 0 0);
 
-  --muted: oklch(0.30 0 0);
-  --muted-foreground: oklch(0.7 0 0);
+  --muted: oklch(0.24 0 0);
+  --muted-foreground: oklch(0.78 0 0);
 
-  --accent: oklch(0.30 0 0);
-  --accent-foreground: oklch(0.985 0 0);
+  --accent: oklch(0.28 0 0);
+  --accent-foreground: oklch(0.99 0 0);
 
-  --destructive: oklch(0.5 0.2 27);
-  --destructive-foreground: oklch(0.985 0 0);
+  --destructive: oklch(0.55 0.22 27);
+  --destructive-foreground: oklch(0.99 0 0);
 
-  --border: oklch(0.35 0 0);
-  --input: oklch(0.35 0 0);
-  --ring: oklch(0.68 0.19 45);
+  --border: oklch(0.38 0 0);
+  --input: oklch(0.32 0 0);
+  --ring: oklch(0.72 0.20 45);
+
+  --match-waiting: oklch(0.65 0.02 250);
+  --match-playing: oklch(0.72 0.20 45);
+  --match-finished: oklch(0.55 0 0);
+  --match-winner: oklch(0.78 0.16 85);
 
   --chart-1: oklch(0.68 0.19 45);
   --chart-2: oklch(0.696 0.17 162.48);
@@ -94,7 +98,56 @@
   --sidebar-accent: oklch(0.30 0 0);
   --sidebar-accent-foreground: oklch(0.985 0 0);
   --sidebar-border: oklch(0.35 0 0);
-  --sidebar-ring: oklch(0.68 0.19 45);
+  --sidebar-ring: oklch(0.72 0.20 45);
+}
+
+/* High-contrast light theme for bright sunlight */
+.outdoor {
+  --background: oklch(0.99 0 0);
+  --foreground: oklch(0.12 0 0);
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.12 0 0);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.12 0 0);
+
+  --primary: oklch(0.58 0.22 45);
+  --primary-foreground: oklch(1 0 0);
+
+  --secondary: oklch(0.94 0 0);
+  --secondary-foreground: oklch(0.12 0 0);
+
+  --muted: oklch(0.94 0 0);
+  --muted-foreground: oklch(0.38 0 0);
+
+  --accent: oklch(0.92 0 0);
+  --accent-foreground: oklch(0.12 0 0);
+
+  --destructive: oklch(0.50 0.24 27);
+  --destructive-foreground: oklch(1 0 0);
+
+  --border: oklch(0.82 0 0);
+  --input: oklch(0.88 0 0);
+  --ring: oklch(0.58 0.22 45);
+
+  --match-waiting: oklch(0.45 0.03 250);
+  --match-playing: oklch(0.58 0.22 45);
+  --match-finished: oklch(0.40 0 0);
+  --match-winner: oklch(0.55 0.18 85);
+
+  --chart-1: oklch(0.58 0.22 45);
+  --chart-2: oklch(0.45 0.12 162);
+  --chart-3: oklch(0.35 0.08 227);
+  --chart-4: oklch(0.70 0.16 84);
+  --chart-5: oklch(0.60 0.20 16);
+
+  --sidebar: oklch(0.97 0 0);
+  --sidebar-foreground: oklch(0.12 0 0);
+  --sidebar-primary: oklch(0.58 0.22 45);
+  --sidebar-primary-foreground: oklch(1 0 0);
+  --sidebar-accent: oklch(0.94 0 0);
+  --sidebar-accent-foreground: oklch(0.12 0 0);
+  --sidebar-border: oklch(0.85 0 0);
+  --sidebar-ring: oklch(0.58 0.22 45);
 }
 
 @theme inline {
@@ -147,17 +200,45 @@
   }
 }
 
+/* ── Smooth light / dark (CSS only — avoids View Transition AbortError with React) ── */
+html.theme-transition,
+html.theme-transition *,
+html.theme-transition *::before,
+html.theme-transition *::after {
+  transition-property: background-color, border-color, color, fill, stroke, box-shadow, outline-color;
+  transition-duration: 0.42s;
+  transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1) !important;
+}
+
+html.no-theme-transition,
+html.no-theme-transition *,
+html.no-theme-transition *::before,
+html.no-theme-transition *::after {
+  transition: none !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html.theme-transition,
+  html.theme-transition *,
+  html.theme-transition *::before,
+  html.theme-transition *::after {
+    transition: none !important;
+  }
+}
+
 /* Glassmorphism utility classes */
 .glass {
   background: rgba(255, 255, 255, 0.8);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
+  transition: background-color 0.4s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .glass-dark {
   background: rgba(45, 45, 45, 0.85);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
+  transition: background-color 0.4s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 /* Custom scrollbar */
@@ -224,6 +305,26 @@
 .animate-stagger > *:nth-child(7) { animation-delay: 300ms; }
 .animate-stagger > *:nth-child(8) { animation-delay: 350ms; }
 .animate-stagger > *:nth-child(n+9) { animation-delay: 400ms; }
+
+@keyframes match-playing-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 oklch(0.72 0.20 45 / 0.35); }
+  50% { box-shadow: 0 0 0 4px oklch(0.72 0.20 45 / 0.12); }
+}
+
+.match-playing-pulse {
+  animation: match-playing-pulse 2s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .match-playing-pulse {
+    animation: none;
+  }
+}
+
+.outdoor .glass-dark {
+  background: rgba(255, 255, 255, 0.92);
+  color: oklch(0.12 0 0);
+}
 
 /* Mapbox GL CSS overrides */
 .mapboxgl-popup {

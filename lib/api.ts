@@ -102,6 +102,13 @@ export interface GamePlayer {
   host_rated_tier?: Tier | null;
   host_rated_stars?: number | null;
   host_rating_note?: string | null;
+  session_matches?: { played: number; wins: number; losses: number };
+}
+
+export interface GameMatchCounts {
+  pending: number;
+  ongoing: number;
+  finished: number;
 }
 
 export interface MatchPlayer {
@@ -118,6 +125,9 @@ export interface MatchSummary {
   team_a_score: number | null;
   team_b_score: number | null;
   winner_team: 'team_a' | 'team_b' | null;
+  started_at?: string | null;
+  finished_at?: string | null;
+  priority?: boolean;
   team_a: MatchPlayer[];
   team_b: MatchPlayer[];
 }
@@ -164,6 +174,8 @@ export interface CreateMatchParams {
 export interface GameDetail extends Game {
   players: GamePlayer[];
   matches: MatchSummary[];
+  match_counts?: GameMatchCounts;
+  priority_match?: MatchSummary | null;
 }
 
 export interface JoinResponse {
@@ -320,8 +332,12 @@ export function createGame(params: CreateGameParams) {
 
 // --- Matches ----------------------------------------------------------
 
-export function fetchMatches(gameId: number) {
-  return request<{ matches: MatchDetail[] }>(`/api/v1/games/${gameId}/matches`);
+export function fetchMatches(
+  gameId: number,
+  status?: MatchSummary['status'],
+) {
+  const query = status ? `?status=${status}` : ''
+  return request<{ matches: MatchDetail[] }>(`/api/v1/games/${gameId}/matches${query}`)
 }
 
 export function createMatch(gameId: number, params: CreateMatchParams) {
@@ -342,6 +358,10 @@ export function startMatch(gameId: number, matchId: number) {
   return request<MatchDetail>(`/api/v1/games/${gameId}/matches/${matchId}/start`, { method: 'POST' });
 }
 
+export function toggleMatchPriority(gameId: number, matchId: number) {
+  return request<MatchDetail>(`/api/v1/games/${gameId}/matches/${matchId}/priority`, { method: 'POST' });
+}
+
 export function finishMatch(gameId: number, matchId: number, params?: FinishMatchParams) {
   return request<FinishMatchResponse>(`/api/v1/games/${gameId}/matches/${matchId}/finish`, {
     method: 'POST',
@@ -349,9 +369,22 @@ export function finishMatch(gameId: number, matchId: number, params?: FinishMatc
   });
 }
 
+export function undoFinishMatch(gameId: number, matchId: number) {
+  return request<{ match: MatchDetail }>(`/api/v1/games/${gameId}/matches/${matchId}/undo_finish`, {
+    method: 'POST',
+  });
+}
+
 export function deleteMatch(gameId: number, matchId: number) {
   return request<{ message: string }>(`/api/v1/games/${gameId}/matches/${matchId}`, {
     method: 'DELETE',
+  });
+}
+
+export function generateMatchBatch(gameId: number, count: 5 | 10 | 15) {
+  return request<{ matches: MatchDetail[] }>(`/api/v1/games/${gameId}/matches/generate_batch`, {
+    method: 'POST',
+    body: JSON.stringify({ count }),
   });
 }
 
@@ -458,6 +491,8 @@ export function updateProfile(params: UpdateProfileParams) {
 
 // --- Invite (public, no auth) -------------------------------------------
 
+export type InviteGameMode = 'join' | 'live' | 'closed';
+
 export interface InviteGameInfo {
   id: number;
   description: string | null;
@@ -469,10 +504,37 @@ export interface InviteGameInfo {
   end_time: string;
   location: string | null;
   host_name: string | null;
+  mode: InviteGameMode;
+}
+
+export interface InviteLivePlayer {
+  id: number;
+  name: string | null;
+  gender?: Gender;
+  session_matches: { played: number; wins: number; losses: number };
+}
+
+export interface InviteLiveMatch {
+  id: number;
+  match_number: number;
+  status: 'pending' | 'ongoing' | 'finished';
+  priority?: boolean;
+  winner_team?: 'team_a' | 'team_b' | null;
+  team_a_score?: number | null;
+  team_b_score?: number | null;
+  team_a: Array<{ id: number; name: string | null }>;
+  team_b: Array<{ id: number; name: string | null }>;
+}
+
+export interface InviteResponse {
+  game: InviteGameInfo;
+  players?: InviteLivePlayer[];
+  matches?: InviteLiveMatch[];
+  match_counts?: GameMatchCounts;
 }
 
 export function fetchInvite(code: string) {
-  return request<{ game: InviteGameInfo }>(`/api/v1/games/invite/${code}`);
+  return request<InviteResponse>(`/api/v1/games/invite/${code}`);
 }
 
 export function joinViaInvite(code: string, params: { name: string; gender: Gender; tier: Tier; stars: number }) {

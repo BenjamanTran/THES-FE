@@ -20,9 +20,10 @@ import {
   balanceTeams,
   fillSlots,
   calcFairness,
-  hasWideSkillGap,
+  lineupSkillGap,
   type DoublesGenderMode,
 } from "@/lib/balance"
+import { compositeFairnessCounts } from "@/lib/match-stats"
 
 interface CreateMatchSheetProps {
   open: boolean
@@ -52,53 +53,17 @@ export function CreateMatchSheet({
   const [teamB, setTeamB] = useState<number[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const playerStats = useMemo(() => {
-    const stats: Record<number, { played: number; wins: number; losses: number }> = {}
-    for (const m of matches) {
-      const allPlayers = [...(m.team_a || []), ...(m.team_b || [])]
-      for (const p of allPlayers) {
-        if (!stats[p.id]) stats[p.id] = { played: 0, wins: 0, losses: 0 }
-        stats[p.id].played += 1
-        if (m.status === "finished" && m.winner_team) {
-          const inTeamA = m.team_a.some((t) => t.id === p.id)
-          const inTeamB = m.team_b.some((t) => t.id === p.id)
-          const won = (m.winner_team === "team_a" && inTeamA) || (m.winner_team === "team_b" && inTeamB)
-          if (won) stats[p.id].wins += 1
-          else stats[p.id].losses += 1
-        }
-      }
-    }
-    return stats
-  }, [matches])
-
   const teamSize = matchType === "singles" ? 1 : 2
 
-  const matchCounts = useMemo(() => {
-    const counts: Record<number, number> = {}
-    for (const p of players) counts[p.id] = playerStats[p.id]?.played ?? 0
-    return counts
-  }, [players, playerStats])
+  const matchCounts = useMemo(() => compositeFairnessCounts(players, matches), [players, matches])
 
-  const inOngoingMatch = useMemo(() => {
-    const ids = new Set<number>()
-    for (const m of matches) {
-      if (editingMatch && m.id === editingMatch.id) continue
-      if (m.status === "ongoing" || m.status === "pending") {
-        for (const p of [...(m.team_a || []), ...(m.team_b || [])]) ids.add(p.id)
-      }
-    }
-    return ids
-  }, [matches, editingMatch])
+  const sortByName = (a: GamePlayer, b: GamePlayer) =>
+    (a.name || "").localeCompare(b.name || "", "vi")
 
   const assigned = new Set([...teamA, ...teamB])
   const available = players
     .filter((p) => !assigned.has(p.id))
-    .sort((a, b) => {
-      const aInMatch = inOngoingMatch.has(a.id) ? 1 : 0
-      const bInMatch = inOngoingMatch.has(b.id) ? 1 : 0
-      if (aInMatch !== bInMatch) return aInMatch - bInMatch
-      return (playerStats[a.id]?.played ?? 0) - (playerStats[b.id]?.played ?? 0)
-    })
+    .sort(sortByName)
 
   const addToTeam = (playerId: number, team: "a" | "b") => {
     if (team === "a" && teamA.length < teamSize) {
@@ -115,7 +80,7 @@ export function CreateMatchSheet({
 
   const genderModeError = (mode: DoublesGenderMode): string | null => {
     if (mode === "any") return null
-    const eligible = players.filter((p) => !inOngoingMatch.has(p.id))
+    const eligible = players
     const males = eligible.filter((p) => p.gender === "male").length
     const females = eligible.filter((p) => p.gender === "female").length
     if (mode === "mens" && males < 4) return "Cần ít nhất 4 nam để chia đôi nam"
@@ -142,7 +107,7 @@ export function CreateMatchSheet({
     const current = { teamA, teamB }
 
     if (isFull || !hasPartial) {
-      const eligible = players.filter((p) => !inOngoingMatch.has(p.id))
+      const eligible = players
       const result = balanceTeams(eligible, teamSize, matchCounts, genderMode, 0, current)
       if (result.teamA.length < teamSize || result.teamB.length < teamSize) {
         setError(genderModeError(genderMode) || "Không đủ người chơi phù hợp để chia đội")
@@ -152,7 +117,7 @@ export function CreateMatchSheet({
       setTeamB(result.teamB)
     } else {
       const locked = new Set([...teamA, ...teamB])
-      const candidates = players.filter((p) => !locked.has(p.id) && !inOngoingMatch.has(p.id))
+      const candidates = players.filter((p) => !locked.has(p.id))
       const result = fillSlots(
         teamA,
         teamB,
@@ -179,7 +144,10 @@ export function CreateMatchSheet({
     return calcFairness(teamA, teamB, players)
   }, [teamA, teamB, players])
 
-  const wideGap = useMemo(() => hasWideSkillGap(players), [players])
+  const lineupGap = useMemo(
+    () => lineupSkillGap(teamA, teamB, players),
+    [teamA, teamB, players],
+  )
 
   useEffect(() => {
     if (!open) return
@@ -359,12 +327,16 @@ export function CreateMatchSheet({
             </div>
           )}
 
-          {wideGap && (
+          {lineupGap.showWarning && (
             <Card className="p-2.5 rounded-xl bg-amber-500/10 border-amber-500/30">
-              <div className="flex items-center gap-2">
-                <AlertTriangle className="w-3.5 h-3.5 text-amber-400 flex-shrink-0" />
-                <p className="text-[10px] text-amber-400">
-                  Trình độ chênh lệch lớn giữa các người chơi
+              <div className="flex items-start gap-2">
+                <AlertTriangle className="w-3.5 h-3.5 text-amber-400 flex-shrink-0 mt-0.5" />
+                <p className="text-[10px] text-amber-400 leading-snug">
+                  Trong 4 người trận này chênh {lineupGap.tierSpread} bậc
+                  {lineupGap.ratingSpread > 0 ? ` (~${lineupGap.ratingSpread} điểm)` : ""}.
+                  {fairness && fairness.level !== "poor"
+                    ? " Trung bình 2 đội vẫn gần nhau — cân nhắc đổi cặp."
+                    : ""}
                 </p>
               </div>
             </Card>
@@ -374,10 +346,8 @@ export function CreateMatchSheet({
             <div>
               <p className="text-xs text-muted-foreground mb-2">Chọn người chơi:</p>
               <div className="space-y-2">
-                {available.map((p) => {
-                  const busy = inOngoingMatch.has(p.id)
-                  return (
-                  <div key={p.id} className={`flex items-center gap-2 ${busy ? "opacity-40" : ""}`}>
+                {available.map((p) => (
+                  <div key={p.id} className="flex items-center gap-2">
                     <Button
                       size="sm"
                       variant="outline"
@@ -402,19 +372,6 @@ export function CreateMatchSheet({
                           </span>
                         )
                       })()}
-                      {busy ? (
-                        <span className="text-[10px] text-orange-400 font-medium">đang chơi</span>
-                      ) : (() => {
-                        const s = playerStats[p.id]
-                        const played = s?.played || 0
-                        return (
-                          <span className="text-[10px] font-semibold">
-                            <span className="text-muted-foreground">{played} trận</span>
-                            {s && s.wins > 0 && <span className="text-emerald-400"> {s.wins}W</span>}
-                            {s && s.losses > 0 && <span className="text-red-400"> {s.losses}L</span>}
-                          </span>
-                        )
-                      })()}
                     </div>
                     <Button
                       size="sm"
@@ -426,8 +383,7 @@ export function CreateMatchSheet({
                       → B
                     </Button>
                   </div>
-                  )
-                })}
+                ))}
               </div>
             </div>
           )}

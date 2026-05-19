@@ -67,8 +67,11 @@ function SmashHubPro() {
   }, [activeTab])
 
   const openGameDetail = (id: number) => setSelectedGameId(id)
-  const closeGameDetail = () => setSelectedGameId(null)
-  const handleGameChanged = () => setRefreshKey((k) => k + 1)
+  const closeGameDetail = () => {
+    setSelectedGameId(null)
+    setRefreshKey((k) => k + 1)
+  }
+  const handleGameListRefresh = () => setRefreshKey((k) => k + 1)
 
   const handleCreateMatch = (venue?: Venue) => {
     if (!requireAuth()) return
@@ -141,7 +144,7 @@ function SmashHubPro() {
       </div>
 
       {/* Desktop Layout */}
-      <div className="hidden lg:flex min-h-screen bg-gradient-to-br from-neutral-950 via-neutral-900 to-neutral-950">
+      <div className="hidden lg:flex min-h-screen bg-gradient-to-br from-background via-muted/40 to-background">
         {/* Sidebar */}
         <DesktopSidebar
           activeTab={activeTab}
@@ -154,7 +157,7 @@ function SmashHubPro() {
           {/* Phone Mockup */}
           <div className="relative">
             {/* Phone Frame */}
-            <div className="relative w-[390px] h-[844px] bg-background rounded-[3rem] border-[14px] border-neutral-800 shadow-2xl shadow-black/50 overflow-hidden">
+            <div className="relative w-[390px] h-[844px] bg-background rounded-[3rem] border-[14px] border-border shadow-2xl shadow-black/10 dark:border-neutral-800 dark:shadow-black/50 overflow-hidden">
               {/* Screen Content */}
               <div className="h-full overflow-y-auto">
                 <div
@@ -167,7 +170,7 @@ function SmashHubPro() {
             </div>
             
             {/* Reflection effect */}
-            <div className="absolute inset-0 rounded-[3rem] bg-gradient-to-br from-white/5 to-transparent pointer-events-none" />
+            <div className="absolute inset-0 rounded-[3rem] bg-gradient-to-br from-foreground/[0.03] to-transparent dark:from-white/5 pointer-events-none" />
           </div>
         </div>
 
@@ -178,7 +181,7 @@ function SmashHubPro() {
       <CreateMatchModal
         open={showCreateMatch}
         onOpenChange={handleCreateMatchOpenChange}
-        onSuccess={handleGameChanged}
+        onSuccess={handleGameListRefresh}
         initialVenue={createMatchInitialVenue}
       />
 
@@ -186,7 +189,6 @@ function SmashHubPro() {
       <GameDetailScreen
         gameId={selectedGameId}
         onClose={closeGameDetail}
-        onChanged={handleGameChanged}
       />
     </>
   )

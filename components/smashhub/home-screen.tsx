@@ -2,7 +2,9 @@
 
 import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
-import { Bell, Search, MapPin, Users, Clock, ChevronRight, Swords } from "lucide-react"
+import { Sun, Moon, MapPin, Users, Clock, ChevronRight, Swords } from "lucide-react"
+import { useAppTheme } from "@/lib/theme-provider"
+import { cn } from "@/lib/utils"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -41,6 +43,7 @@ function formatGameTime(game: Game) {
 export function HomeScreen({ onCreateMatch, onNavigate, onOpenGame }: HomeScreenProps) {
   const router = useRouter()
   const { user } = useAuth()
+  const { theme, setTheme } = useAppTheme()
   const [games, setGames] = useState<Game[]>([])
   const [loading, setLoading] = useState(true)
   const [suggestedVenues, setSuggestedVenues] = useState<Venue[]>([])
@@ -108,12 +111,31 @@ export function HomeScreen({ onCreateMatch, onNavigate, onOpenGame }: HomeScreen
             </div>
           </div>
           <div className="flex items-center gap-2">
-            <Button variant="ghost" size="icon" className="rounded-full relative" disabled>
-              <Bell className="w-5 h-5" />
-              <span className="absolute top-1 right-1 w-2 h-2 bg-primary rounded-full" />
+            <Button
+              variant="ghost"
+              size="icon"
+              className={cn(
+                "rounded-full",
+                theme === "light" && "bg-primary/15 text-primary ring-1 ring-primary/30",
+              )}
+              onClick={() => setTheme("light")}
+              title="Chế độ sáng"
+              aria-pressed={theme === "light"}
+            >
+              <Sun className="w-5 h-5" />
             </Button>
-            <Button variant="ghost" size="icon" className="rounded-full" disabled>
-              <Search className="w-5 h-5" />
+            <Button
+              variant="ghost"
+              size="icon"
+              className={cn(
+                "rounded-full",
+                theme === "dark" && "bg-primary/15 text-primary ring-1 ring-primary/30",
+              )}
+              onClick={() => setTheme("dark")}
+              title="Chế độ tối"
+              aria-pressed={theme === "dark"}
+            >
+              <Moon className="w-5 h-5" />
             </Button>
           </div>
         </div>

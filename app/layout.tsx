@@ -2,6 +2,8 @@ import type { Metadata, Viewport } from 'next'
 import { Lexend } from 'next/font/google'
 
 import { AuthProvider } from '@/lib/auth-context'
+import { ThemeProvider } from '@/lib/theme-provider'
+import { Toaster } from '@/components/ui/sonner'
 import './globals.css'
 
 const lexend = Lexend({ 
@@ -29,7 +31,7 @@ export const viewport: Viewport = {
   initialScale: 1,
   maximumScale: 1,
   userScalable: false,
-  themeColor: '#353535',
+  themeColor: '#fafafa',
 }
 
 export default function RootLayout({
@@ -38,10 +40,12 @@ export default function RootLayout({
   children: React.ReactNode
 }>) {
   return (
-    <html lang="vi" className="dark bg-background" suppressHydrationWarning>
+    <html lang="vi" className="outdoor bg-background" suppressHydrationWarning>
       <body className={`${lexend.variable} font-sans antialiased`}>
-        <AuthProvider>{children}</AuthProvider>
-
+        <ThemeProvider>
+          <AuthProvider>{children}</AuthProvider>
+          <Toaster position="top-center" richColors closeButton />
+        </ThemeProvider>
       </body>
     </html>
   )
