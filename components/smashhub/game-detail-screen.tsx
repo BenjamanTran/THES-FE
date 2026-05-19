@@ -102,6 +102,8 @@ import { formatPriceRange } from "@/lib/format"
 import { cn } from "@/lib/utils"
 import { format } from "date-fns"
 import { vi } from "date-fns/locale"
+import { playerAvatarInitial } from "@/lib/player-display-name"
+import { ratingToStars } from "@/lib/rating-stars"
 
 interface GameDetailScreenProps {
   gameId: number | null
@@ -135,8 +137,6 @@ function fitMeta(fit: GameDetail["fit_level"]) {
       return null
   }
 }
-
-import { ratingToStars } from "@/lib/rating-stars"
 
 function generateFbPost(game: GameDetail): string {
   const start = new Date(game.start_time)
@@ -192,13 +192,6 @@ function generateFbPost(game: GameDetail): string {
   ]
 
   return lines.filter(l => l !== "").join("\n")
-}
-
-function avatarLabel(name: string | null) {
-  if (!name) return "?"
-  const parts = name.trim().split(/\s+/)
-  const last = parts[parts.length - 1] || name
-  return last.charAt(0).toUpperCase()
 }
 
 const UNDO_MS = 5000
@@ -1388,7 +1381,7 @@ export function GameDetailScreen({ gameId, onClose }: GameDetailScreenProps) {
                         <div className="relative flex-shrink-0">
                           <Avatar className="w-9 h-9">
                             <AvatarFallback className="bg-primary/20 text-primary text-xs font-semibold">
-                              {avatarLabel(player.name)}
+                              {playerAvatarInitial(player.name)}
                             </AvatarFallback>
                           </Avatar>
                           {player.gender && (

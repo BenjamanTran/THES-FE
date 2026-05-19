@@ -1,6 +1,7 @@
 import type { GameDetail, GamePlayer, MatchSummary } from "@/lib/api"
 import { balanceTeams } from "@/lib/balance"
 import { compositeFairnessCounts } from "@/lib/match-stats"
+import { playerDisplayName } from "@/lib/player-display-name"
 
 export type NextMatchSuggestion =
   | {
@@ -41,14 +42,8 @@ export type NextMatchSuggestion =
       reason: string
     }
 
-function shortName(name: string | null, id: number) {
-  if (!name) return `#${id}`
-  const parts = name.trim().split(/\s+/)
-  return parts[parts.length - 1] || name
-}
-
 export function formatMatchLabel(match: MatchSummary) {
-  const names = [...match.team_a, ...match.team_b].map((p) => shortName(p.name, p.id))
+  const names = [...match.team_a, ...match.team_b].map((p) => playerDisplayName(p.name, p.id))
   return `Trận ${match.match_number}: ${names.join(" · ")}`
 }
 
@@ -59,7 +54,7 @@ function formatTeamsLabel(
 ) {
   const name = (id: number) => {
     const p = players.find((pl) => pl.id === id)
-    return shortName(p?.name ?? null, id)
+    return playerDisplayName(p?.name, id)
   }
   const a = teamAIds.map(name).join(" & ")
   const b = teamBIds.map(name).join(" & ")
@@ -195,7 +190,7 @@ export function getMatchStartBlockers(
     if (!onCourt) continue
     seen.add(p.id)
     blockers.push({
-      playerName: shortName(p.name, p.id),
+      playerName: playerDisplayName(p.name, p.id),
       ongoingMatchNumber: onCourt.match_number,
     })
   }
@@ -252,7 +247,7 @@ function fairnessReason(
   const ids = [...teamA, ...teamB]
   const names = ids
     .filter((id) => (fairness[id] ?? 0) === minLoad)
-    .map((id) => shortName(players.find((p) => p.id === id)?.name ?? null, id))
+    .map((id) => playerDisplayName(players.find((p) => p.id === id)?.name, id))
     .slice(0, 3)
   if (names.length === 0) return "Cân bằng lượt chơi trong buổi"
   return `Ưu tiên ${names.join(", ")}`

@@ -518,6 +518,9 @@ export interface InviteLivePlayer {
   id: number;
   name: string | null;
   gender?: Gender;
+  rank?: PlayerRank | null;
+  host_rated_tier?: Tier | null;
+  host_rated_stars?: number | null;
   session_matches: { played: number; wins: number; losses: number };
 }
 

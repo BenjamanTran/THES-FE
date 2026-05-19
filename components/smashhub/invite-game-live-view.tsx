@@ -1,10 +1,13 @@
 "use client"
 
-import { Swords, Users, Clock, MapPin, Trophy } from "lucide-react"
+import { Swords, Users, Clock, MapPin, Trophy, Star } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { GenderIcon } from "./gender-icon"
+import { SkillBadge } from "./skill-badge"
+import { ratingToStars } from "@/lib/rating-stars"
 import type { InviteGameInfo, InviteLiveMatch, InviteLivePlayer } from "@/lib/api"
+import { playerDisplayName } from "@/lib/player-display-name"
 import { cn } from "@/lib/utils"
 
 interface InviteGameLiveViewProps {
@@ -25,15 +28,9 @@ function formatTime(iso: string) {
   })
 }
 
-function shortName(name: string | null, id: number) {
-  if (!name) return `#${id}`
-  const parts = name.trim().split(/\s+/)
-  return parts[parts.length - 1] || name
-}
-
 function teamLine(match: InviteLiveMatch, side: "team_a" | "team_b") {
   const team = side === "team_a" ? match.team_a : match.team_b
-  const label = team.map((p) => shortName(p.name, p.id)).join(" - ")
+  const label = team.map((p) => playerDisplayName(p.name, p.id)).join(" · ")
   const won = match.status === "finished" && match.winner_team === side
   return (
     <span className={cn(won && "text-primary font-semibold")}>
@@ -154,11 +151,33 @@ export function InviteGameLiveView({
         <ul className="space-y-1.5 max-h-48 overflow-y-auto rounded-xl border border-border/40 divide-y divide-border/30">
           {players.map((p) => {
             const s = p.session_matches
+            const tier = p.host_rated_tier || p.rank?.tier
+            const stars =
+              p.host_rated_tier != null && p.host_rated_stars != null
+                ? p.host_rated_stars
+                : p.rank
+                  ? ratingToStars(p.rank.tier, p.rank.rating)
+                  : null
             return (
-              <li key={p.id} className="flex items-center gap-2 px-3 py-2 text-sm">
-                <span className="font-medium truncate flex-1">{p.name || `#${p.id}`}</span>
-                {p.gender && <GenderIcon gender={p.gender} size="sm" />}
-                <span className="text-xs font-semibold tabular-nums shrink-0">
+              <li key={p.id} className="flex items-start gap-2 px-3 py-2 text-sm">
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-1.5 min-w-0">
+                    <span className="font-medium truncate">
+                      {playerDisplayName(p.name, p.id)}
+                    </span>
+                    {p.gender ? <GenderIcon gender={p.gender} size="sm" /> : null}
+                  </div>
+                  <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
+                    <SkillBadge level={tier ?? null} size="xs" compact />
+                    {tier && stars != null ? (
+                      <span className="flex items-center gap-0.5 text-[10px] text-amber-500 font-semibold tabular-nums">
+                        {stars}
+                        <Star className="w-2.5 h-2.5 fill-amber-500 text-amber-500" />
+                      </span>
+                    ) : null}
+                  </div>
+                </div>
+                <span className="text-xs font-semibold tabular-nums shrink-0 text-right">
                   <span className="text-primary">{s?.played ?? 0} trận</span>
                   {isClosed && s && s.played > 0 && (
                     <>
