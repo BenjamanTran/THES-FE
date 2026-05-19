@@ -87,8 +87,14 @@ export function InviteGameLiveView({
   onGoHome,
 }: InviteGameLiveViewProps) {
   const isClosed = game.mode === "closed"
+  const isLive = game.mode === "live"
   const ongoing = matches.filter((m) => m.status === "ongoing")
-  const pending = matches.filter((m) => m.status === "pending")
+  const pending = matches
+    .filter((m) => m.status === "pending")
+    .sort((a, b) => {
+      if (a.priority !== b.priority) return a.priority ? -1 : 1
+      return a.match_number - b.match_number
+    })
   const finished = matches
     .filter((m) => m.status === "finished")
     .sort((a, b) => b.match_number - a.match_number)
@@ -129,9 +135,16 @@ export function InviteGameLiveView({
             {formatTime(game.start_time)}
           </span>
         </div>
-        <Badge variant="secondary" className={cn("rounded-full text-[10px]", statusBadge.className)}>
-          {statusBadge.text}
-        </Badge>
+        <div className="flex flex-wrap items-center gap-2">
+          <Badge variant="secondary" className={cn("rounded-full text-[10px]", statusBadge.className)}>
+            {statusBadge.text}
+          </Badge>
+          {isLive && (
+            <span className="text-[10px] text-muted-foreground">
+              Tự động cập nhật
+            </span>
+          )}
+        </div>
       </div>
 
       <div>
@@ -201,16 +214,22 @@ export function InviteGameLiveView({
                 </ul>
               </div>
             )}
-            {pending.length > 0 && (
+            {(isLive || pending.length > 0) && (
               <div>
                 <p className="text-[11px] font-medium text-amber-600 dark:text-amber-400 mb-1.5">
-                  Sắp diễn ra
+                  Hàng chờ ({matchCounts.pending > 0 ? matchCounts.pending : pending.length})
                 </p>
-                <ul className="space-y-1.5">
-                  {pending.map((m) => (
-                    <MatchRow key={m.id} match={m} />
-                  ))}
-                </ul>
+                {pending.length > 0 ? (
+                  <ul className="space-y-1.5 max-h-56 overflow-y-auto pr-0.5">
+                    {pending.map((m) => (
+                      <MatchRow key={m.id} match={m} />
+                    ))}
+                  </ul>
+                ) : (
+                  <p className="text-xs text-muted-foreground py-2 px-1">
+                    Chưa có trận trong hàng chờ. Host xếp trận mới sẽ hiện ở đây.
+                  </p>
+                )}
               </div>
             )}
             {finished.length > 0 && (

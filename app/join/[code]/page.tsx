@@ -21,6 +21,7 @@ import { useGameCable } from "@/hooks/use-game-cable";
 import type { GameCableEvent } from "@/lib/game-cable";
 import {
   applyInviteCableEvent,
+  normalizeInviteLiveState,
   type InviteLiveState,
 } from "@/lib/invite-live-cable";
 
@@ -50,6 +51,33 @@ export default function JoinPage({ params }: { params: Promise<{ code: string }>
   const [inviteLive, setInviteLive] = useState<InviteLiveState | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const isLiveMode = gameInfo?.mode === "live";
+
+  const applyInvitePayload = useCallback(
+    (res: Awaited<ReturnType<typeof fetchInvite>>) => {
+      setGameInfo(res.game);
+      if (res.game.mode === "live" || res.game.mode === "closed") {
+        setInviteLive(
+          normalizeInviteLiveState(
+            {
+              players: res.players ?? [],
+              matches: res.matches ?? [],
+              matchCounts:
+                res.match_counts ?? { pending: 0, ongoing: 0, finished: 0 },
+            },
+            res.game.mode === "live",
+          ),
+        );
+      }
+    },
+    [],
+  );
+
+  const refreshInviteLive = useCallback(() => {
+    fetchInvite(code)
+      .then(applyInvitePayload)
+      .catch(() => {});
+  }, [code, applyInvitePayload]);
 
   const [name, setName] = useState("");
   const [gender, setGender] = useState<Gender>("male");
@@ -65,30 +93,40 @@ export default function JoinPage({ params }: { params: Promise<{ code: string }>
           router.replace(`/?game=${res.game.id}`);
           return;
         }
-        setGameInfo(res.game);
-        if (res.game.mode === "live" || res.game.mode === "closed") {
-          setInviteLive({
-            players: res.players ?? [],
-            matches: res.matches ?? [],
-            matchCounts:
-              res.match_counts ?? { pending: 0, ongoing: 0, finished: 0 },
-          });
-        }
+        applyInvitePayload(res);
       })
       .catch((err) => setLoadError(err instanceof Error ? err.message : "Không tìm thấy trận"))
       .finally(() => setLoading(false));
-  }, [code, user, authLoading, router]);
+  }, [code, user, authLoading, router, applyInvitePayload]);
 
-  const handleInviteCableEvent = useCallback((payload: GameCableEvent) => {
-    setInviteLive((prev) =>
-      prev ? applyInviteCableEvent(prev, payload) : prev,
-    );
-  }, []);
+  useEffect(() => {
+    if (!isLiveMode || loading) return;
+    const id = window.setInterval(refreshInviteLive, 8000);
+    const onVisible = () => {
+      if (document.visibilityState === "visible") refreshInviteLive();
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      window.clearInterval(id);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
+  }, [isLiveMode, loading, refreshInviteLive]);
+
+  const handleInviteCableEvent = useCallback(
+    (payload: GameCableEvent) => {
+      setInviteLive((prev) =>
+        prev
+          ? applyInviteCableEvent(prev, payload, { liveSnapshot: true })
+          : prev,
+      );
+    },
+    [],
+  );
 
   useGameCable(
-    gameInfo?.mode === "live" ? gameInfo.id : null,
+    isLiveMode ? gameInfo?.id ?? null : null,
     handleInviteCableEvent,
-    gameInfo?.mode === "live",
+    isLiveMode,
     { inviteCode: code },
   );
 

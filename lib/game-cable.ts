@@ -15,9 +15,23 @@ export type GameCableEvent =
 
 let sharedConsumer: Consumer | null = null
 
+function cableWebSocketUrl(): string {
+  if (typeof window !== "undefined") {
+    try {
+      const api = new URL(API_URL)
+      api.protocol = api.protocol === "https:" ? "wss:" : "ws:"
+      api.pathname = "/cable"
+      return api.toString()
+    } catch {
+      // fall through
+    }
+  }
+  return API_URL.replace(/^http/, "ws") + "/cable"
+}
+
 function getConsumer(): Consumer {
   if (!sharedConsumer) {
-    sharedConsumer = createConsumer(`${API_URL}/cable`)
+    sharedConsumer = createConsumer(cableWebSocketUrl())
   }
   return sharedConsumer
 }
@@ -25,6 +39,8 @@ function getConsumer(): Consumer {
 export type GameCableSubscribeOptions = {
   /** Invite link code — allows anonymous spectators on /join/[code] */
   inviteCode?: string
+  onConnected?: () => void
+  onDisconnected?: () => void
 }
 
 export function subscribeToGame(
@@ -38,6 +54,12 @@ export function subscribeToGame(
   }
 
   return getConsumer().subscriptions.create(params, {
+    connected() {
+      options?.onConnected?.()
+    },
+    disconnected() {
+      options?.onDisconnected?.()
+    },
     received(data: GameCableEvent & { revision?: number }) {
       onEvent(data)
     },

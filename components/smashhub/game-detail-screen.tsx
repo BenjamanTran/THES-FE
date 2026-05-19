@@ -1003,7 +1003,7 @@ export function GameDetailScreen({ gameId, onClose }: GameDetailScreenProps) {
       await loadGame(game.id)
       if (created > 0) {
         setMatchTab("queue")
-        toast.success(`Đã xếp ${created} trận vào hàng chờ (cân bằng lượt)`)
+        toast.success(`Đã xếp ${created} trận — chia lượt đều trong hàng chờ`)
       }
       if (errors.length > 0) {
         toast.error(errors[0])

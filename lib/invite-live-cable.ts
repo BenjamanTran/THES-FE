@@ -1,11 +1,16 @@
 import type { GameMatchCounts, InviteLiveMatch, InviteLivePlayer, MatchSummary } from "@/lib/api"
 import type { GameCableEvent } from "@/lib/game-cable"
-import { adjustSessionStatsForFinishedMatch, matchCountsFromList } from "@/lib/match-stats"
+import { adjustSessionStatsForFinishedMatch } from "@/lib/match-stats"
 
 export interface InviteLiveState {
   players: InviteLivePlayer[]
   matches: InviteLiveMatch[]
   matchCounts: GameMatchCounts
+}
+
+export type InviteLiveApplyOptions = {
+  /** Live invite link: only keep ongoing + pending in the list; track finished via counts */
+  liveSnapshot?: boolean
 }
 
 export function matchSummaryToInviteLive(m: MatchSummary): InviteLiveMatch {
@@ -22,9 +27,36 @@ export function matchSummaryToInviteLive(m: MatchSummary): InviteLiveMatch {
   }
 }
 
+function sortLiveMatches(matches: InviteLiveMatch[]): InviteLiveMatch[] {
+  return [...matches].sort((a, b) => {
+    const order = (s: InviteLiveMatch["status"]) =>
+      s === "ongoing" ? 0 : s === "pending" ? 1 : 2
+    const d = order(a.status) - order(b.status)
+    if (d !== 0) return d
+    if (a.status === "pending" && b.status === "pending") {
+      if (a.priority !== b.priority) return a.priority ? -1 : 1
+    }
+    return a.match_number - b.match_number
+  })
+}
+
+function recount(state: InviteLiveState): InviteLiveState {
+  const pending = state.matches.filter((m) => m.status === "pending").length
+  const ongoing = state.matches.filter((m) => m.status === "ongoing").length
+  return {
+    ...state,
+    matchCounts: {
+      ...state.matchCounts,
+      pending,
+      ongoing,
+    },
+  }
+}
+
 function patchInviteMatch(
   state: InviteLiveState,
   updated: InviteLiveMatch,
+  options?: InviteLiveApplyOptions,
 ): InviteLiveState {
   const prevMatch = state.matches.find((m) => m.id === updated.id)
   let players = state.players
@@ -52,41 +84,71 @@ function patchInviteMatch(
     players = adjustSessionStatsForFinishedMatch(players, updated as MatchSummary, 1)
   }
 
+  let finishedCount = state.matchCounts.finished
+
+  if (options?.liveSnapshot && updated.status === "finished") {
+    const matches = state.matches.filter((m) => m.id !== updated.id)
+    if (prevMatch?.status !== "finished") finishedCount += 1
+    return recount({
+      players,
+      matches: sortLiveMatches(matches),
+      matchCounts: { ...state.matchCounts, finished: finishedCount },
+    })
+  }
+
   const matches = state.matches.map((m) => {
     if (m.id === updated.id) return updated
     if (updated.priority && updated.status === "pending") return { ...m, priority: false }
     return m
   })
   const hasMatch = matches.some((m) => m.id === updated.id)
-  const nextMatches =
+  let nextMatches =
     hasMatch || updated.status !== "pending" ? matches : [...matches, updated]
 
-  return {
+  if (options?.liveSnapshot) {
+    nextMatches = nextMatches.filter((m) => m.status === "ongoing" || m.status === "pending")
+    nextMatches = sortLiveMatches(nextMatches)
+  }
+
+  return recount({
     players,
     matches: nextMatches,
-    matchCounts: matchCountsFromList(nextMatches as MatchSummary[], {
-      fallbackFinished: state.matchCounts.finished,
-    }),
-  }
+    matchCounts: { ...state.matchCounts, finished: finishedCount },
+  })
+}
+
+export function normalizeInviteLiveState(
+  state: InviteLiveState,
+  liveSnapshot: boolean,
+): InviteLiveState {
+  if (!liveSnapshot) return state
+  const matches = sortLiveMatches(
+    state.matches.filter((m) => m.status === "ongoing" || m.status === "pending"),
+  )
+  return recount({ ...state, matches })
 }
 
 export function applyInviteCableEvent(
   state: InviteLiveState,
   payload: GameCableEvent,
+  options?: InviteLiveApplyOptions,
 ): InviteLiveState {
   if (payload.event === "match.deleted") {
-    const matches = state.matches.filter((m) => m.id !== payload.match_id)
-    return {
-      players: state.players,
-      matches,
-      matchCounts: matchCountsFromList(matches as MatchSummary[], {
-        fallbackFinished: state.matchCounts.finished,
-      }),
+    const removed = state.matches.find((m) => m.id === payload.match_id)
+    let finishedCount = state.matchCounts.finished
+    if (options?.liveSnapshot && removed?.status === "finished") {
+      finishedCount = Math.max(0, finishedCount - 1)
     }
+    const matches = state.matches.filter((m) => m.id !== payload.match_id)
+    return recount({
+      ...state,
+      matches: options?.liveSnapshot ? sortLiveMatches(matches) : matches,
+      matchCounts: { ...state.matchCounts, finished: finishedCount },
+    })
   }
 
   if ("match" in payload && payload.match) {
-    return patchInviteMatch(state, matchSummaryToInviteLive(payload.match))
+    return patchInviteMatch(state, matchSummaryToInviteLive(payload.match), options)
   }
 
   return state

@@ -16,6 +16,13 @@ export function useGameCable(
 ) {
   const handlerRef = useRef(onEvent)
   handlerRef.current = onEvent
+
+  const onConnectedRef = useRef(options?.onConnected)
+  onConnectedRef.current = options?.onConnected
+
+  const onDisconnectedRef = useRef(options?.onDisconnected)
+  onDisconnectedRef.current = options?.onDisconnected
+
   const inviteCode = options?.inviteCode
 
   useEffect(() => {
@@ -26,10 +33,14 @@ export function useGameCable(
       sub = subscribeToGame(
         gameId,
         (payload) => handlerRef.current(payload),
-        inviteCode ? { inviteCode } : undefined,
+        {
+          inviteCode,
+          onConnected: () => onConnectedRef.current?.(),
+          onDisconnected: () => onDisconnectedRef.current?.(),
+        },
       )
     } catch {
-      // ActionCable unavailable — REST refresh still works
+      onDisconnectedRef.current?.()
     }
 
     return () => {
