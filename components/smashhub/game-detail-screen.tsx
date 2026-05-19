@@ -620,7 +620,14 @@ export function GameDetailScreen({ gameId, onClose }: GameDetailScreenProps) {
     [patchMatchInGame, syncGameMatches],
   )
 
-  useGameCable(gameId, handleCableEvent, open && gameId != null)
+  const cableEnabled =
+    open &&
+    gameId != null &&
+    game != null &&
+    game.status !== "finished" &&
+    game.status !== "cancelled"
+
+  useGameCable(gameId, handleCableEvent, cableEnabled)
 
   const handleTapWinner = async (match: MatchSummary, team: "team_a" | "team_b") => {
     if (!game || finishingMatchId != null) return

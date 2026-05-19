@@ -18,7 +18,7 @@ import {
 import { SKILL_LABELS, type SkillLevel } from "@/components/smashhub/skill-badge";
 import { InviteGameLiveView } from "@/components/smashhub/invite-game-live-view";
 import { useGameCable } from "@/hooks/use-game-cable";
-import type { GameCableEvent } from "@/lib/game-cable";
+import { disconnectGameCable, type GameCableEvent } from "@/lib/game-cable";
 import {
   applyInviteCableEvent,
   normalizeInviteLiveState,
@@ -51,7 +51,9 @@ export default function JoinPage({ params }: { params: Promise<{ code: string }>
   const [inviteLive, setInviteLive] = useState<InviteLiveState | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
-  const isLiveMode = gameInfo?.mode === "live";
+  /** Realtime only while session is live; closed = HTTP fetch only */
+  const useRealtime = gameInfo?.mode === "live";
+  const isClosedMode = gameInfo?.mode === "closed";
 
   const applyInvitePayload = useCallback(
     (res: Awaited<ReturnType<typeof fetchInvite>>) => {
@@ -100,7 +102,11 @@ export default function JoinPage({ params }: { params: Promise<{ code: string }>
   }, [code, user, authLoading, router, applyInvitePayload]);
 
   useEffect(() => {
-    if (!isLiveMode || loading) return;
+    if (isClosedMode) disconnectGameCable();
+  }, [isClosedMode]);
+
+  useEffect(() => {
+    if (loading || !useRealtime) return;
     const id = window.setInterval(refreshInviteLive, 8000);
     const onVisible = () => {
       if (document.visibilityState === "visible") refreshInviteLive();
@@ -110,7 +116,17 @@ export default function JoinPage({ params }: { params: Promise<{ code: string }>
       window.clearInterval(id);
       document.removeEventListener("visibilitychange", onVisible);
     };
-  }, [isLiveMode, loading, refreshInviteLive]);
+  }, [useRealtime, loading, refreshInviteLive]);
+
+  useEffect(() => {
+    if (loading || !isClosedMode) return;
+    refreshInviteLive();
+    const onVisible = () => {
+      if (document.visibilityState === "visible") refreshInviteLive();
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => document.removeEventListener("visibilitychange", onVisible);
+  }, [isClosedMode, loading, refreshInviteLive]);
 
   const handleInviteCableEvent = useCallback(
     (payload: GameCableEvent) => {
@@ -124,9 +140,9 @@ export default function JoinPage({ params }: { params: Promise<{ code: string }>
   );
 
   useGameCable(
-    isLiveMode ? gameInfo?.id ?? null : null,
+    useRealtime ? (gameInfo?.id ?? null) : null,
     handleInviteCableEvent,
-    isLiveMode,
+    useRealtime,
     { inviteCode: code },
   );
 

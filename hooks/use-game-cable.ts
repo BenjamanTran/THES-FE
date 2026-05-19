@@ -3,6 +3,7 @@
 import { useEffect, useRef } from "react"
 import type { Subscription } from "@rails/actioncable"
 import {
+  disconnectGameCable,
   subscribeToGame,
   type GameCableEvent,
   type GameCableSubscribeOptions,
@@ -47,4 +48,9 @@ export function useGameCable(
       sub?.unsubscribe()
     }
   }, [gameId, enabled, inviteCode])
+
+  useEffect(() => {
+    if (enabled) return
+    disconnectGameCable()
+  }, [enabled])
 }
