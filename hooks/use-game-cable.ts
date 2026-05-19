@@ -2,22 +2,32 @@
 
 import { useEffect, useRef } from "react"
 import type { Subscription } from "@rails/actioncable"
-import { subscribeToGame, type GameCableEvent } from "@/lib/game-cable"
+import {
+  subscribeToGame,
+  type GameCableEvent,
+  type GameCableSubscribeOptions,
+} from "@/lib/game-cable"
 
 export function useGameCable(
   gameId: number | null,
   onEvent: (payload: GameCableEvent) => void,
   enabled = true,
+  options?: GameCableSubscribeOptions,
 ) {
   const handlerRef = useRef(onEvent)
   handlerRef.current = onEvent
+  const inviteCode = options?.inviteCode
 
   useEffect(() => {
     if (!enabled || gameId == null) return
 
     let sub: Subscription | null = null
     try {
-      sub = subscribeToGame(gameId, (payload) => handlerRef.current(payload))
+      sub = subscribeToGame(
+        gameId,
+        (payload) => handlerRef.current(payload),
+        inviteCode ? { inviteCode } : undefined,
+      )
     } catch {
       // ActionCable unavailable — REST refresh still works
     }
@@ -25,5 +35,5 @@ export function useGameCable(
     return () => {
       sub?.unsubscribe()
     }
-  }, [gameId, enabled])
+  }, [gameId, enabled, inviteCode])
 }

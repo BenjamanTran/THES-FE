@@ -35,6 +35,7 @@ import { useGeolocation } from "@/hooks/use-geolocation"
 import { formatPriceRange, formatVndShort } from "@/lib/format"
 import { format } from "date-fns"
 import { vi } from "date-fns/locale"
+import { cn } from "@/lib/utils"
 
 interface MatchesScreenProps {
   onCreateMatch: () => void
@@ -74,12 +75,13 @@ interface Filters {
   priceMax: number
 }
 
-const DEFAULT_FILTERS: Filters = {
+/** Mặc định: không lọc — hiển thị tất cả trận chưa kết thúc */
+const ALL_FILTERS: Filters = {
   tier: null,
   radiusKm: 5,
   matchType: "any",
-  notFull: true,
-  useLocation: true,
+  notFull: false,
+  useLocation: false,
   priceMax: 0,
 }
 
@@ -96,9 +98,9 @@ const PER_PAGE = 15
 
 export function MatchesScreen({ onCreateMatch, onOpenGame }: MatchesScreenProps) {
   const { user } = useAuth()
-  const geo = useGeolocation(true)
-  const [filters, setFilters] = useState<Filters>(DEFAULT_FILTERS)
-  const [draftFilters, setDraftFilters] = useState<Filters>(DEFAULT_FILTERS)
+  const geo = useGeolocation(false)
+  const [filters, setFilters] = useState<Filters>(ALL_FILTERS)
+  const [draftFilters, setDraftFilters] = useState<Filters>(ALL_FILTERS)
   const [filterOpen, setFilterOpen] = useState(false)
   const [games, setGames] = useState<Game[]>([])
   const [page, setPage] = useState(1)
@@ -113,8 +115,8 @@ export function MatchesScreen({ onCreateMatch, onOpenGame }: MatchesScreenProps)
   const buildParams = useCallback(
     (pageNum: number): Record<string, string> => {
       const params: Record<string, string> = {
-        status: "open",
-        sort: "created_at_desc",
+        time_scope: "discover",
+        sort: "discover",
         per_page: String(PER_PAGE),
         page: String(pageNum),
       }
@@ -177,30 +179,35 @@ export function MatchesScreen({ onCreateMatch, onOpenGame }: MatchesScreenProps)
     let n = 0
     if (filters.tier) n += 1
     if (filters.matchType !== "any") n += 1
-    if (!filters.notFull) n += 1
-    if (filters.useLocation && locationActive) n += 1
+    if (filters.notFull) n += 1
+    if (filters.useLocation) n += 1
     if (filters.priceMax > 0) n += 1
     return n
-  }, [filters, locationActive])
-
-  const openFilterSheet = () => {
-    setDraftFilters(filters)
-    setFilterOpen(true)
-  }
+  }, [filters])
 
   const applyDraft = () => {
     setFilters(draftFilters)
     setFilterOpen(false)
+    if (draftFilters.useLocation && geo.status !== "granted") {
+      geo.request()
+    }
   }
 
-  const resetDraft = () => setDraftFilters(DEFAULT_FILTERS)
+  const resetDraft = () => setDraftFilters(ALL_FILTERS)
+
+  const clearAllFilters = () => {
+    setFilters(ALL_FILTERS)
+    setDraftFilters(ALL_FILTERS)
+    setFilterOpen(false)
+  }
 
   const removeFilter = (key: keyof Filters) => {
-    setFilters((f) => ({ ...f, [key]: DEFAULT_FILTERS[key] }))
+    setFilters((f) => ({ ...f, [key]: ALL_FILTERS[key] }))
   }
 
   const locationStatusText = (() => {
-    if (!filters.useLocation) return "Đã tắt định vị"
+    if (activeFilterCount === 0) return "Trận đang diễn ra · đã kết thúc ở cuối"
+    if (!filters.useLocation) return "Đã áp dụng bộ lọc"
     switch (geo.status) {
       case "granted":
         return `Trong bán kính ${filters.radiusKm} km`
@@ -246,14 +253,15 @@ export function MatchesScreen({ onCreateMatch, onOpenGame }: MatchesScreenProps)
             </p>
           </div>
           <div className="flex items-center gap-2">
-            <Sheet open={filterOpen} onOpenChange={setFilterOpen}>
+            <Sheet
+              open={filterOpen}
+              onOpenChange={(open) => {
+                if (open) setDraftFilters(filters)
+                setFilterOpen(open)
+              }}
+            >
               <SheetTrigger asChild>
-                <Button
-                  variant="outline"
-                  size="icon"
-                  className="h-9 w-9 rounded-xl relative"
-                  onClick={openFilterSheet}
-                >
+                <Button variant="outline" size="icon" className="h-9 w-9 rounded-xl relative">
                   <Filter className="w-4 h-4" />
                   {activeFilterCount > 0 && (
                     <span className="absolute -top-1 -right-1 w-4 h-4 bg-primary text-primary-foreground text-[10px] font-bold rounded-full flex items-center justify-center">
@@ -289,6 +297,17 @@ export function MatchesScreen({ onCreateMatch, onOpenGame }: MatchesScreenProps)
                         {draftFilters.useLocation ? "Đang bật" : "Đã tắt"}
                       </button>
                     </div>
+                    {draftFilters.useLocation && geo.status !== "granted" && (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="rounded-full mb-2"
+                        onClick={geo.request}
+                      >
+                        Cho phép định vị
+                      </Button>
+                    )}
                     {draftFilters.useLocation && (
                       <div className="flex gap-2 flex-wrap">
                         {RADIUS_OPTIONS.map((r) => (
@@ -440,25 +459,22 @@ export function MatchesScreen({ onCreateMatch, onOpenGame }: MatchesScreenProps)
                 />
               </Badge>
             )}
-            {!filters.notFull && (
+            {filters.notFull && (
               <Badge
                 variant="secondary"
                 className="flex items-center gap-1 px-2 py-1 rounded-full flex-shrink-0"
               >
-                Cả trận đầy
+                Còn chỗ
                 <X className="w-3 h-3 cursor-pointer" onClick={() => removeFilter("notFull")} />
               </Badge>
             )}
-            {filters.useLocation && locationActive && (
+            {filters.useLocation && (
               <Badge
                 variant="secondary"
                 className="flex items-center gap-1 px-2 py-1 rounded-full flex-shrink-0"
               >
-                ≤ {filters.radiusKm} km
-                <X
-                  className="w-3 h-3 cursor-pointer"
-                  onClick={() => setFilters((f) => ({ ...f, useLocation: false }))}
-                />
+                {locationActive ? `≤ ${filters.radiusKm} km` : "Theo vị trí"}
+                <X className="w-3 h-3 cursor-pointer" onClick={() => removeFilter("useLocation")} />
               </Badge>
             )}
             {filters.priceMax > 0 && (
@@ -506,14 +522,28 @@ export function MatchesScreen({ onCreateMatch, onOpenGame }: MatchesScreenProps)
           </div>
         ) : (
           <div className="space-y-3 animate-stagger">
-            {games.map((game) => {
+            {games.map((game, index) => {
               const { date, time } = formatTime(game)
               const isHost = game.host?.id === user?.id
+              const isFinished = game.status === "finished"
+              const showFinishedHeader =
+                isFinished &&
+                (index === 0 || games[index - 1]?.status !== "finished")
               return (
+                <div key={game.id}>
+                  {showFinishedHeader && (
+                    <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide pt-2 pb-1 px-0.5">
+                      Đã kết thúc
+                    </p>
+                  )}
                 <Card
-                  key={game.id}
                   onClick={() => onOpenGame?.(game.id)}
-                  className="p-4 rounded-2xl border-border/50 hover:border-primary/30 transition-colors cursor-pointer"
+                  className={cn(
+                    "p-4 rounded-2xl border-border/50 transition-colors cursor-pointer",
+                    isFinished
+                      ? "opacity-75 hover:opacity-90 hover:border-border"
+                      : "hover:border-primary/30",
+                  )}
                 >
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0 flex-1">
@@ -524,6 +554,11 @@ export function MatchesScreen({ onCreateMatch, onOpenGame }: MatchesScreenProps)
                         {isHost && (
                           <Badge className="bg-primary/20 text-primary border-0 text-[10px] px-1.5 py-0">
                             Bạn host
+                          </Badge>
+                        )}
+                        {isFinished && (
+                          <Badge className="bg-muted text-muted-foreground border-0 text-[10px] px-1.5 py-0">
+                            Đã kết thúc
                           </Badge>
                         )}
                       </div>
@@ -596,6 +631,7 @@ export function MatchesScreen({ onCreateMatch, onOpenGame }: MatchesScreenProps)
                     </div>
                   </div>
                 </Card>
+                </div>
               )
             })}
 

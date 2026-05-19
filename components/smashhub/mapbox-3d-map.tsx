@@ -25,12 +25,14 @@ function tierLabel(tier: string | null): string {
 }
 
 function radiusFromZoom(zoom: number): number {
-  if (zoom >= 16) return 1;
-  if (zoom >= 14) return 3;
-  if (zoom >= 12) return 10;
-  if (zoom >= 10) return 30;
+  if (zoom >= 16) return 8;
+  if (zoom >= 14) return 15;
+  if (zoom >= 12) return 25;
+  if (zoom >= 10) return 40;
   return 50;
 }
+
+export type MapGameStatusFilter = 'all' | 'open' | 'not_full';
 
 const HCM_CENTER: [number, number] = [106.6601, 10.7626];
 const HN_CENTER: [number, number] = [105.8342, 21.0278];
@@ -49,10 +51,15 @@ function groupKey(lat: number, lng: number): string {
 
 interface Mapbox3DMapProps {
   city?: 'HCM' | 'HN';
+  statusFilter?: MapGameStatusFilter;
   onOpenGame?: (id: number) => void;
 }
 
-export function Mapbox3DMap({ city = 'HCM', onOpenGame }: Mapbox3DMapProps = {}) {
+export function Mapbox3DMap({
+  city = 'HCM',
+  statusFilter = 'all',
+  onOpenGame,
+}: Mapbox3DMapProps = {}) {
   const mapContainer = useRef<HTMLDivElement>(null);
   const map = useRef<mapboxgl.Map | null>(null);
   const [games, setGames] = useState<Game[]>([]);
@@ -75,13 +82,17 @@ export function Mapbox3DMap({ city = 'HCM', onOpenGame }: Mapbox3DMapProps = {})
       const zoom = map.current!.getZoom();
       const radius = radiusFromZoom(zoom);
 
-      fetchGamesSearch({
+      const params: Record<string, string> = {
         lat: String(center.lat),
         lng: String(center.lng),
         radius: String(radius),
-        status: 'open',
-        per_page: '20',
-      })
+        time_scope: 'active',
+        per_page: '50',
+      };
+      if (statusFilter === 'open') params.status = 'open';
+      if (statusFilter === 'not_full') params.not_full = 'true';
+
+      fetchGamesSearch(params)
         .then((res) => {
           const newGames: Game[] = [];
           const mergedIds = new Set<number>();
@@ -98,7 +109,13 @@ export function Mapbox3DMap({ city = 'HCM', onOpenGame }: Mapbox3DMapProps = {})
         })
         .catch(() => {});
     }, 300);
-  }, []);
+  }, [statusFilter]);
+
+  useEffect(() => {
+    setGames([]);
+    setSelectedGroupKey(null);
+    if (mapReady) loadGamesInView();
+  }, [statusFilter, city, mapReady, loadGamesInView]);
 
   const handleGetCurrentLocation = () => {
     setIsLoadingLocation(true);

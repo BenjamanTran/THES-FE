@@ -22,18 +22,26 @@ function getConsumer(): Consumer {
   return sharedConsumer
 }
 
+export type GameCableSubscribeOptions = {
+  /** Invite link code — allows anonymous spectators on /join/[code] */
+  inviteCode?: string
+}
+
 export function subscribeToGame(
   gameId: number,
   onEvent: (payload: GameCableEvent & { revision?: number }) => void,
+  options?: GameCableSubscribeOptions,
 ): Subscription {
-  return getConsumer().subscriptions.create(
-    { channel: "GameChannel", game_id: gameId },
-    {
-      received(data: GameCableEvent & { revision?: number }) {
-        onEvent(data)
-      },
+  const params: Record<string, string | number> = { channel: "GameChannel", game_id: gameId }
+  if (options?.inviteCode) {
+    params.invite_code = options.inviteCode
+  }
+
+  return getConsumer().subscriptions.create(params, {
+    received(data: GameCableEvent & { revision?: number }) {
+      onEvent(data)
     },
-  )
+  })
 }
 
 export function disconnectGameCable() {

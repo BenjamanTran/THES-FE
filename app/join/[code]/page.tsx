@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, use } from "react";
+import { useCallback, useEffect, useState, use } from "react";
 import { useRouter } from "next/navigation";
 import { Loader2, Star, MapPin, Users, Clock } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -12,13 +12,17 @@ import {
   fetchInvite,
   joinViaInvite,
   type InviteGameInfo,
-  type InviteLiveMatch,
-  type InviteLivePlayer,
   type Gender,
   type Tier,
 } from "@/lib/api";
 import { SKILL_LABELS, type SkillLevel } from "@/components/smashhub/skill-badge";
 import { InviteGameLiveView } from "@/components/smashhub/invite-game-live-view";
+import { useGameCable } from "@/hooks/use-game-cable";
+import type { GameCableEvent } from "@/lib/game-cable";
+import {
+  applyInviteCableEvent,
+  type InviteLiveState,
+} from "@/lib/invite-live-cable";
 
 const GENDER_OPTIONS: Array<{ value: Gender; label: string }> = [
   { value: "male", label: "Nam" },
@@ -43,13 +47,7 @@ export default function JoinPage({ params }: { params: Promise<{ code: string }>
   const { user, loading: authLoading, refresh } = useAuth();
 
   const [gameInfo, setGameInfo] = useState<InviteGameInfo | null>(null);
-  const [livePlayers, setLivePlayers] = useState<InviteLivePlayer[]>([]);
-  const [liveMatches, setLiveMatches] = useState<InviteLiveMatch[]>([]);
-  const [liveMatchCounts, setLiveMatchCounts] = useState({
-    pending: 0,
-    ongoing: 0,
-    finished: 0,
-  });
+  const [inviteLive, setInviteLive] = useState<InviteLiveState | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -69,16 +67,30 @@ export default function JoinPage({ params }: { params: Promise<{ code: string }>
         }
         setGameInfo(res.game);
         if (res.game.mode === "live" || res.game.mode === "closed") {
-          setLivePlayers(res.players ?? []);
-          setLiveMatches(res.matches ?? []);
-          setLiveMatchCounts(
-            res.match_counts ?? { pending: 0, ongoing: 0, finished: 0 },
-          );
+          setInviteLive({
+            players: res.players ?? [],
+            matches: res.matches ?? [],
+            matchCounts:
+              res.match_counts ?? { pending: 0, ongoing: 0, finished: 0 },
+          });
         }
       })
       .catch((err) => setLoadError(err instanceof Error ? err.message : "Không tìm thấy trận"))
       .finally(() => setLoading(false));
   }, [code, user, authLoading, router]);
+
+  const handleInviteCableEvent = useCallback((payload: GameCableEvent) => {
+    setInviteLive((prev) =>
+      prev ? applyInviteCableEvent(prev, payload) : prev,
+    );
+  }, []);
+
+  useGameCable(
+    gameInfo?.mode === "live" ? gameInfo.id : null,
+    handleInviteCableEvent,
+    gameInfo?.mode === "live",
+    { inviteCode: code },
+  );
 
   const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -162,12 +174,12 @@ export default function JoinPage({ params }: { params: Promise<{ code: string }>
           </div>
         </div>
 
-        {isSnapshotView ? (
+        {isSnapshotView && inviteLive ? (
           <InviteGameLiveView
             game={gameInfo}
-            players={livePlayers}
-            matches={liveMatches}
-            matchCounts={liveMatchCounts}
+            players={inviteLive.players}
+            matches={inviteLive.matches}
+            matchCounts={inviteLive.matchCounts}
             onGoHome={() => router.push("/")}
           />
         ) : !isJoinable ? (
