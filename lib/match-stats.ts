@@ -122,6 +122,35 @@ export function sessionMatchCountsFromPlayers(
   return counts
 }
 
+/**
+ * Player list "X trận": finished (API) + slots in pending/ongoing loaded matches.
+ * Aligns display with batch/suggest fairness (session history + current queue).
+ */
+export function computePlayerDisplayCounts(
+  players: { id: number; session_matches?: PlayerSessionStats }[],
+  matches: MatchSummary[] | undefined,
+): Record<number, PlayerSessionStats> {
+  const base = sessionMatchCountsFromPlayers(players)
+  const queueSlots: Record<number, number> = {}
+
+  for (const match of matches ?? []) {
+    if (match.status !== "pending" && match.status !== "ongoing") continue
+    for (const p of [...(match.team_a || []), ...(match.team_b || [])]) {
+      queueSlots[p.id] = (queueSlots[p.id] ?? 0) + 1
+    }
+  }
+
+  const counts: Record<number, PlayerSessionStats> = {}
+  for (const p of players) {
+    const b = base[p.id] ?? { played: 0, wins: 0, losses: 0 }
+    counts[p.id] = {
+      ...b,
+      played: b.played + (queueSlots[p.id] ?? 0),
+    }
+  }
+  return counts
+}
+
 function playerWonInMatch(playerId: number, match: MatchSummary): boolean | null {
   if (!match.winner_team) return null
   const inA = match.team_a.some((t) => t.id === playerId)

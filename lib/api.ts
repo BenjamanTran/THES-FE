@@ -381,6 +381,13 @@ export function deleteMatch(gameId: number, matchId: number) {
   });
 }
 
+export function deletePendingMatches(gameId: number) {
+  return request<{ deleted_count: number; match_ids: number[] }>(
+    `/api/v1/games/${gameId}/matches/pending`,
+    { method: 'DELETE' },
+  );
+}
+
 export function generateMatchBatch(gameId: number, count: 5 | 10 | 15) {
   return request<{ matches: MatchDetail[] }>(`/api/v1/games/${gameId}/matches/generate_batch`, {
     method: 'POST',

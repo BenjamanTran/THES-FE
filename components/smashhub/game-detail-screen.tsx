@@ -55,6 +55,7 @@ import {
   joinGame,
   leaveGame,
   deleteMatch,
+  deletePendingMatches,
   createMatch,
   startMatch,
   toggleMatchPriority,
@@ -86,7 +87,7 @@ import {
   adjustSessionStatsForFinishedMatch,
   matchCountsFromList,
   maxSessionPlayed,
-  sessionMatchCountsFromPlayers,
+  computePlayerDisplayCounts,
 } from "@/lib/match-stats"
 import {
   getMatchStartBlockers,
@@ -709,6 +710,7 @@ export function GameDetailScreen({ gameId, onClose }: GameDetailScreenProps) {
   }
 
   const [deletingMatchId, setDeletingMatchId] = useState<number | null>(null)
+  const [deletingAllPending, setDeletingAllPending] = useState(false)
   const handleDeleteMatch = async (matchId: number) => {
     if (!game) return
     setDeletingMatchId(matchId)
@@ -716,10 +718,13 @@ export function GameDetailScreen({ gameId, onClose }: GameDetailScreenProps) {
       await deleteMatch(game.id, matchId)
       setGame((prev) => {
         if (!prev?.matches) return prev
-        return syncGameMatches(
-          prev,
-          prev.matches.filter((m) => m.id !== matchId),
-        )
+        const next = prev.matches.filter((m) => m.id !== matchId)
+        const clearedPriority =
+          prev.priority_match?.id === matchId ? null : prev.priority_match
+        return {
+          ...syncGameMatches(prev, next),
+          priority_match: clearedPriority,
+        }
       })
     } catch {
       // silently ignore
@@ -828,8 +833,8 @@ export function GameDetailScreen({ gameId, onClose }: GameDetailScreenProps) {
   }, [game])
 
   const playerMatchCounts = useMemo(
-    () => sessionMatchCountsFromPlayers(game?.players ?? []),
-    [game?.players],
+    () => computePlayerDisplayCounts(game?.players ?? [], game?.matches),
+    [game?.players, game?.matches],
   )
   const maxPlayed = useMemo(() => maxSessionPlayed(playerMatchCounts), [playerMatchCounts])
 
@@ -855,6 +860,37 @@ export function GameDetailScreen({ gameId, onClose }: GameDetailScreenProps) {
         .sort((a, b) => b.match_number - a.match_number),
     }
   }, [game?.matches])
+
+  const handleDeleteAllPending = async () => {
+    if (!game) return
+    const count = pendingMatches.length
+    if (count === 0) return
+    if (
+      !window.confirm(
+        `Xóa tất cả ${count} trận trong hàng chờ? Không thể hoàn tác.`,
+      )
+    ) {
+      return
+    }
+    setDeletingAllPending(true)
+    try {
+      await deletePendingMatches(game.id)
+      setGame((prev) => {
+        if (!prev) return prev
+        const next = (prev.matches ?? []).filter((m) => m.status !== "pending")
+        return {
+          ...syncGameMatches(prev, next),
+          priority_match:
+            prev.priority_match?.status === "pending" ? null : prev.priority_match,
+        }
+      })
+      toast.success(`Đã xóa ${count} trận trong hàng chờ`)
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Không xóa được hàng chờ")
+    } finally {
+      setDeletingAllPending(false)
+    }
+  }
 
   const tabMatchCounts = useMemo(
     () =>
@@ -1597,6 +1633,26 @@ export function GameDetailScreen({ gameId, onClose }: GameDetailScreenProps) {
                           {tab.count > 0 ? ` (${tab.count})` : ""}
                         </button>
                       ))}
+                    </div>
+                  )}
+
+                  {canManage && matchTab === "queue" && pendingMatches.length > 0 && (
+                    <div className="px-4 pb-2 flex justify-end">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="h-8 text-xs text-destructive border-destructive/30 hover:bg-destructive/10 hover:text-destructive"
+                        onClick={() => void handleDeleteAllPending()}
+                        disabled={deletingAllPending || deletingMatchId != null}
+                      >
+                        {deletingAllPending ? (
+                          <Loader2 className="w-3.5 h-3.5 animate-spin mr-1.5" />
+                        ) : (
+                          <Trash2 className="w-3.5 h-3.5 mr-1.5" />
+                        )}
+                        Xóa tất cả ({pendingMatches.length})
+                      </Button>
                     </div>
                   )}
 
