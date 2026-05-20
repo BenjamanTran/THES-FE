@@ -96,6 +96,44 @@ export function maxSessionPlayed(counts: Record<number, PlayerSessionStats>) {
  * Fairness weight for suggest / batch / balance: finished (incl. ongoing) × 1000 + slots in any match.
  * Lower = should play next. Pending queue counts toward load so we do not over-schedule the same four.
  */
+/** Finished + ongoing only — who should step on court next (ignore pending queue slots). */
+export function rotationFairnessCounts(
+  players: GamePlayer[],
+  matches: MatchSummary[] | undefined,
+): Record<number, number> {
+  const rotation = computeRotationCounts(matches)
+  const counts: Record<number, number> = {}
+  for (const p of players) {
+    counts[p.id] = Math.max(rotation[p.id] ?? 0, p.session_matches?.played ?? 0)
+  }
+  return counts
+}
+
+/** Max − min played in session (same basis as player list "X trận", no pending queue). */
+export function sessionPlayedSpread(
+  players: GamePlayer[],
+  matches: MatchSummary[] | undefined,
+): number {
+  const counts = rotationFairnessCounts(players, matches)
+  const values = players.map((p) => counts[p.id] ?? 0)
+  if (values.length === 0) return 0
+  return Math.max(...values) - Math.min(...values)
+}
+
+/** Slots in pending matches only — tie-break when starting from queue. */
+export function pendingSlotCounts(matches: MatchSummary[] | undefined) {
+  const counts: Record<number, number> = {}
+  if (!matches) return counts
+
+  for (const match of matches) {
+    if (match.status !== "pending") continue
+    for (const p of [...(match.team_a || []), ...(match.team_b || [])]) {
+      counts[p.id] = (counts[p.id] ?? 0) + 1
+    }
+  }
+  return counts
+}
+
 export function compositeFairnessCounts(
   players: GamePlayer[],
   matches: MatchSummary[] | undefined,
@@ -123,29 +161,30 @@ export function sessionMatchCountsFromPlayers(
 }
 
 /**
- * Player list "X trận": finished (API) + slots in pending/ongoing loaded matches.
- * Aligns display with batch/suggest fairness (session history + current queue).
+ * Player list "X trận": finished in this session (API) + ongoing on court if not yet in API.
+ * Pending queue slots are excluded — batch "Xếp 10 trận" must not inflate totals before play.
  */
 export function computePlayerDisplayCounts(
   players: { id: number; session_matches?: PlayerSessionStats }[],
   matches: MatchSummary[] | undefined,
 ): Record<number, PlayerSessionStats> {
   const base = sessionMatchCountsFromPlayers(players)
-  const queueSlots: Record<number, number> = {}
+  const onCourt: Record<number, number> = {}
 
   for (const match of matches ?? []) {
-    if (match.status !== "pending" && match.status !== "ongoing") continue
+    if (match.status !== "ongoing") continue
     for (const p of [...(match.team_a || []), ...(match.team_b || [])]) {
-      queueSlots[p.id] = (queueSlots[p.id] ?? 0) + 1
+      onCourt[p.id] = (onCourt[p.id] ?? 0) + 1
     }
   }
 
   const counts: Record<number, PlayerSessionStats> = {}
   for (const p of players) {
     const b = base[p.id] ?? { played: 0, wins: 0, losses: 0 }
+    const live = onCourt[p.id] ?? 0
     counts[p.id] = {
       ...b,
-      played: b.played + (queueSlots[p.id] ?? 0),
+      played: b.played + live,
     }
   }
   return counts

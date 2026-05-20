@@ -55,14 +55,14 @@ function CompactPlayer({
   const { gender, tier, stars, tc } = playerMeta(p, game)
   return (
     <span
-      className="flex items-center gap-0.5 min-w-0 max-w-full truncate text-[11px] leading-tight font-medium text-foreground"
+      className="flex flex-wrap items-center gap-x-0.5 gap-y-0 min-w-0 max-w-full text-[11px] leading-snug font-medium text-foreground break-words"
       title={
         tier && stars != null
           ? `${p.name} · ${SKILL_LABELS[tier as SkillLevel]} ${stars}`
           : p.name || undefined
       }
     >
-      <span className="truncate">{p.name || `#${p.id}`}</span>
+      <span className="break-words">{p.name || `#${p.id}`}</span>
       {gender ? <GenderIcon gender={gender} size="sm" /> : null}
       {tier && stars != null && tc ? (
         <span className={cn("shrink-0 text-[9px] font-semibold tabular-nums", tc.text)}>
@@ -107,9 +107,9 @@ function TeamsRow({
   center: React.ReactNode
 }) {
   return (
-    <div className="grid grid-cols-[1fr_auto_1fr] gap-1.5 items-center min-w-0">
+    <div className="grid grid-cols-[1fr_auto_1fr] gap-1.5 items-start min-w-0">
       <TeamColumn team={match.team_a} game={game} align="end" />
-      <div className="shrink-0 px-0.5 text-center">{center}</div>
+      <div className="shrink-0 px-0.5 text-center self-center">{center}</div>
       <TeamColumn team={match.team_b} game={game} align="start" />
     </div>
   )
@@ -149,9 +149,9 @@ export function GameMatchCard({
     isFinished && match.team_a_score != null && match.team_b_score != null
 
   const tapBtnClass = cn(
-    "flex-1 min-h-[48px] rounded-lg border-2 border-primary/50 bg-primary/15",
+    "flex-1 min-h-[48px] min-w-0 rounded-lg border-2 border-primary/50 bg-primary/15",
     "active:scale-[0.98] transition-transform touch-manipulation",
-    "flex items-center justify-center px-2 py-1.5 text-center",
+    "flex items-center justify-center px-2 py-2 text-center",
     "hover:bg-primary/25 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary",
     isFinishing && "opacity-60 pointer-events-none",
   )
@@ -275,14 +275,14 @@ export function GameMatchCard({
 
       {canFinishThis ? (
         <div className="space-y-1">
-          <div className="flex gap-1.5">
+          <div className="flex gap-1.5 items-stretch">
             <button
               type="button"
               disabled={isFinishing}
               onClick={() => onTapWinner!(match, "team_a")}
               className={tapBtnClass}
             >
-              <span className="text-[13px] font-bold leading-snug text-foreground truncate max-w-full">
+              <span className="text-[13px] font-bold leading-snug text-foreground break-words whitespace-normal w-full">
                 {teamTapNames(match.team_a)}{" "}
                 <span className="text-[11px] font-bold text-primary tracking-wide">(THẮNG)</span>
               </span>
@@ -293,7 +293,7 @@ export function GameMatchCard({
               onClick={() => onTapWinner!(match, "team_b")}
               className={tapBtnClass}
             >
-              <span className="text-[13px] font-bold leading-snug text-foreground truncate max-w-full">
+              <span className="text-[13px] font-bold leading-snug text-foreground break-words whitespace-normal w-full">
                 {teamTapNames(match.team_b)}{" "}
                 <span className="text-[11px] font-bold text-primary tracking-wide">(THẮNG)</span>
               </span>

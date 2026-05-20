@@ -15,7 +15,7 @@ interface NextMatchSuggestProps {
   onStart: () => void
   onCreateAndStart: () => void
   onQueue: () => void
-  onGenerateBatch: (count: 10 | 15) => void
+  onGenerateBatch: () => void
 }
 
 export function NextMatchSuggest({
@@ -99,23 +99,20 @@ export function NextMatchSuggest({
       </div>
 
       {showBatchActions ? (
-        <div className="flex gap-1.5 mt-2 pl-6">
-          {([10, 15] as const).map((n) => (
-            <Button
-              key={n}
-              size="sm"
-              variant="secondary"
-              className="flex-1 h-8 rounded-full text-[11px] font-medium"
-              disabled={loading || batchLoading}
-              onClick={() => onGenerateBatch(n)}
-            >
-              {batchLoading ? (
-                <Loader2 className="w-3.5 h-3.5 animate-spin" />
-              ) : (
-                `Xếp ${n} trận`
-              )}
-            </Button>
-          ))}
+        <div className="mt-2 pl-6">
+          <Button
+            size="sm"
+            variant="secondary"
+            className="w-full h-8 rounded-full text-[11px] font-medium"
+            disabled={loading || batchLoading}
+            onClick={onGenerateBatch}
+          >
+            {batchLoading ? (
+              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+            ) : (
+              "Xếp 10 trận"
+            )}
+          </Button>
         </div>
       ) : null}
     </div>

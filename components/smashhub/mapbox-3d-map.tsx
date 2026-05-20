@@ -3,51 +3,18 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import mapboxgl from 'mapbox-gl';
 import 'mapbox-gl/dist/mapbox-gl.css';
-import { Layers, Zap, Navigation, Clock, MapPin, Users, Swords, X, ChevronRight, Wallet } from 'lucide-react';
+import { Layers, Zap, Navigation } from 'lucide-react';
 import { fetchGamesSearch, type Game } from '@/lib/api';
-import { format } from 'date-fns';
-import { formatPriceRange } from '@/lib/format';
 
-const TIER_LABELS: Record<string, string> = {
-  newbie: 'Newbie',
-  beginner_plus: 'Yếu +',
-  lower_intermediate: 'Trung bình yếu',
-  intermediate: 'Trung bình -',
-  upper_intermediate: 'Trung bình +',
-  advanced: 'Khá',
-  semi_pro: 'Bán chuyên',
-  professional: 'Chuyên nghiệp',
-};
+import {
+  CITY_CENTERS,
+  HCM_CENTER,
+  type MapGameStatusFilter,
+} from './map/constants';
+import { groupKey, radiusFromZoom, type GameGroup } from './map/utils';
+import { MapGroupBottomSheet } from './map/map-group-bottom-sheet';
 
-function tierLabel(tier: string | null): string {
-  if (!tier) return '—';
-  return TIER_LABELS[tier] || tier;
-}
-
-function radiusFromZoom(zoom: number): number {
-  if (zoom >= 16) return 8;
-  if (zoom >= 14) return 15;
-  if (zoom >= 12) return 25;
-  if (zoom >= 10) return 40;
-  return 50;
-}
-
-export type MapGameStatusFilter = 'all' | 'open' | 'not_full';
-
-const HCM_CENTER: [number, number] = [106.6601, 10.7626];
-const HN_CENTER: [number, number] = [105.8342, 21.0278];
-const CITY_CENTERS: Record<string, [number, number]> = { HCM: HCM_CENTER, HN: HN_CENTER };
-
-interface GameGroup {
-  key: string;
-  lat: number;
-  lng: number;
-  games: Game[];
-}
-
-function groupKey(lat: number, lng: number): string {
-  return `${lat.toFixed(5)},${lng.toFixed(5)}`;
-}
+export type { MapGameStatusFilter } from './map/constants';
 
 interface Mapbox3DMapProps {
   city?: 'HCM' | 'HN';
@@ -430,107 +397,11 @@ export function Mapbox3DMap({
       </div>
 
       {selectedGroup && (
-        <div className="absolute bottom-4 left-4 right-4 z-10">
-          <div className="bg-white dark:bg-neutral-800 rounded-2xl shadow-xl border border-border/30 overflow-hidden">
-            <div className="flex items-start justify-between gap-3 px-4 py-3 border-b border-border/30">
-              <div className="min-w-0 flex-1">
-                <div className="flex items-center gap-2">
-                  <MapPin className="w-4 h-4 text-orange-500 shrink-0" />
-                  <h3 className="font-bold text-sm truncate">
-                    {selectedGroup.games[0]?.location || 'Địa điểm này'}
-                  </h3>
-                </div>
-                <p className="text-[11px] text-muted-foreground mt-0.5">
-                  {selectedGroup.games.length} trận đấu
-                  {' · '}
-                  {selectedGroup.lat.toFixed(5)}, {selectedGroup.lng.toFixed(5)}
-                </p>
-              </div>
-              <button
-                onClick={() => setSelectedGroupKey(null)}
-                className="text-muted-foreground hover:text-foreground transition-colors p-1 shrink-0"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-
-            <div className="max-h-[60dvh] overflow-y-auto divide-y divide-border/30">
-              {selectedGroup.games.map((g) => (
-                <button
-                  key={g.id}
-                  type="button"
-                  onClick={() => onOpenGame?.(g.id)}
-                  className="w-full text-left p-3 hover:bg-secondary/40 transition-colors flex gap-3 items-start"
-                >
-                  <div
-                    className={`w-9 h-9 rounded-full flex items-center justify-center shrink-0 ${
-                      g.match_type === 'doubles' ? 'bg-orange-500/15' : 'bg-blue-500/15'
-                    }`}
-                  >
-                    <span className="text-base">🏸</span>
-                  </div>
-
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-2">
-                      <span className="font-semibold text-sm">
-                        {g.match_type === 'singles' ? 'Đơn (1v1)' : 'Đôi (2v2)'}
-                      </span>
-                      <span
-                        className={`text-[10px] font-medium px-1.5 py-0.5 rounded-full ${
-                          g.status === 'open'
-                            ? 'bg-green-500/20 text-green-600 dark:text-green-400'
-                            : g.status === 'full'
-                              ? 'bg-blue-500/20 text-blue-600 dark:text-blue-400'
-                              : 'bg-neutral-500/20 text-neutral-600 dark:text-neutral-400'
-                        }`}
-                      >
-                        {g.status === 'open'
-                          ? 'Đang mở'
-                          : g.status === 'full'
-                            ? 'Đã đầy'
-                            : g.status === 'ongoing'
-                              ? 'Đang diễn ra'
-                              : g.status === 'finished'
-                                ? 'Đã kết thúc'
-                                : 'Đã huỷ'}
-                      </span>
-                    </div>
-
-                    <div className="flex items-center gap-3 text-[11px] text-muted-foreground mt-1 flex-wrap">
-                      <span className="flex items-center gap-1">
-                        <Clock className="w-3 h-3" />
-                        {format(new Date(g.start_time), 'HH:mm dd/MM')} – {format(new Date(g.end_time), 'HH:mm')}
-                      </span>
-                      <span className="flex items-center gap-1">
-                        <Users className="w-3 h-3" />
-                        {g.players_count}/{g.max_players}
-                      </span>
-                      <span className="flex items-center gap-1">
-                        <Swords className="w-3 h-3" />
-                        {tierLabel(g.min_tier)}
-                        {g.max_tier && g.max_tier !== g.min_tier ? ` – ${tierLabel(g.max_tier)}` : ''}
-                      </span>
-                      {(g.min_price > 0 || g.max_price > 0) && (
-                        <span className="flex items-center gap-1">
-                          <Wallet className="w-3 h-3" />
-                          {formatPriceRange(g.min_price ?? 0, g.max_price ?? 0)}
-                        </span>
-                      )}
-                    </div>
-
-                    {g.host?.name && (
-                      <p className="text-[11px] text-muted-foreground mt-1">
-                        Host: <span className="text-foreground font-medium">{g.host.name}</span>
-                      </p>
-                    )}
-                  </div>
-
-                  <ChevronRight className="w-4 h-4 text-muted-foreground shrink-0 mt-1" />
-                </button>
-              ))}
-            </div>
-          </div>
-        </div>
+        <MapGroupBottomSheet
+          group={selectedGroup}
+          onClose={() => setSelectedGroupKey(null)}
+          onOpenGame={onOpenGame}
+        />
       )}
     </div>
   );

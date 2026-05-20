@@ -42,7 +42,7 @@ function pickBatchRoster(
     const fourKey = [...roster].sort((a, b) => a - b).join(",")
     const mcSum = roster.reduce((s, id) => s + (fairness[id] ?? 0), 0)
     const subset = players.filter((p) => roster.includes(p.id))
-    const pairing = balanceTeams(subset, teamSize, undefined, "any")
+    const pairing = balanceTeams(subset, teamSize, fairness, "any")
     if (pairing.teamA.length < teamSize || pairing.teamB.length < teamSize) continue
 
     const diff = calcFairness(pairing.teamA, pairing.teamB, players).diff
@@ -89,7 +89,7 @@ export async function generateMatchBatchFair(
     if (!roster) break
 
     const subset = players.filter((p) => roster.includes(p.id))
-    const { teamA, teamB } = balanceTeams(subset, teamSize, undefined, "any")
+    const { teamA, teamB } = balanceTeams(subset, teamSize, fairness, "any")
     if (teamA.length < teamSize || teamB.length < teamSize) break
 
     avoidFourPlayerSets.add([...roster].sort((a, b) => a - b).join(","))
