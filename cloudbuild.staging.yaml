@@ -1,7 +1,7 @@
 # Staging: FE repo only (Dockerfile at repo root). THE_S = Terraform/docker-compose; copy this file
 # into your Next.js repo (e.g. cloudbuild.staging.yaml) and wire the trigger there.
 # Artifact Registry: terraform default the-s-api-staging (or a dedicated FE docker repo).
-# Set _NEXT_PUBLIC_API_URL to the public API base URL (https://...).
+# Set _NEXT_PUBLIC_API_URL to the public API base URL (https://...) — same host as API_PUBLIC_URL on API.
 
 substitutions:
   _REGION: asia-southeast1
@@ -10,6 +10,7 @@ substitutions:
   _NEXT_PUBLIC_API_URL: ""
   _NEXT_PUBLIC_MAPBOX_TOKEN: ""
   _FE_BUILD_DIR: "."
+  # Trigger UI / terraform fe_substitutions: set _NEXT_PUBLIC_API_URL=https://api.your-domain.com
 
 options:
   logging: CLOUD_LOGGING_ONLY

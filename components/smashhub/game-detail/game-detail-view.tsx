@@ -28,7 +28,7 @@ import {
   Moon,
   Undo2,
 } from "lucide-react"
-import { Avatar, AvatarFallback } from "@/components/ui/avatar"
+import { UserAvatar } from "../user-avatar"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
@@ -46,7 +46,6 @@ import { formatPriceRange } from "@/lib/format"
 import { cn } from "@/lib/utils"
 import { format } from "date-fns"
 import { vi } from "date-fns/locale"
-import { playerAvatarInitial } from "@/lib/player-display-name"
 import { ratingToStars } from "@/lib/rating-stars"
 import { generateFbPost, statusMeta } from "./meta"
 import { MAX_CO_HOSTS } from "@/components/smashhub/game-detail/constants"
@@ -502,11 +501,12 @@ export function GameDetailView({ vm }: { vm: GameDetailViewModel }) {
                     return (
                       <div key={player.id} className="flex items-center gap-3">
                         <div className="relative flex-shrink-0">
-                          <Avatar className="w-9 h-9">
-                            <AvatarFallback className="bg-primary/20 text-primary text-xs font-semibold">
-                              {playerAvatarInitial(player.name)}
-                            </AvatarFallback>
-                          </Avatar>
+                          <UserAvatar
+                            name={player.name}
+                            avatarUrl={player.avatar_url}
+                            className="w-9 h-9"
+                            fallbackClassName="text-xs"
+                          />
                           {player.gender && (
                             <span className="absolute -bottom-0.5 -right-0.5 bg-background rounded-full p-0.5">
                               <GenderIcon gender={player.gender} size="sm" />

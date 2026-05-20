@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation"
 import { Sun, Moon, MapPin, Users, Clock, ChevronRight, Swords } from "lucide-react"
 import { useAppTheme } from "@/lib/theme-provider"
 import { cn } from "@/lib/utils"
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
+import { UserAvatar } from "./user-avatar"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
@@ -95,12 +95,11 @@ export function HomeScreen({ onCreateMatch, onNavigate, onOpenGame }: HomeScreen
       <header className="glass-dark sticky top-0 z-40 px-4 pt-4 pb-3 safe-top border-b border-border/20">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <Avatar className="w-11 h-11 ring-2 ring-primary/30">
-              <AvatarImage src="/placeholder.svg?height=44&width=44" alt="User" />
-              <AvatarFallback className="bg-primary/20 text-primary font-bold">
-                {user?.name ? user.name.trim().split(/\s+/).slice(-1)[0].charAt(0).toUpperCase() : "🏸"}
-              </AvatarFallback>
-            </Avatar>
+            <UserAvatar
+              name={user?.name}
+              avatarUrl={user?.avatar_url}
+              className="w-11 h-11 ring-2 ring-primary/30"
+            />
             <div>
               <p className="text-xs text-muted-foreground">
                 {user ? "Xin chào," : "Chào bạn,"}

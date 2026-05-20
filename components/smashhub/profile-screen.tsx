@@ -3,6 +3,7 @@
 import { Settings, LogOut, Loader2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { EditProfileSheet } from "./edit-profile-sheet"
+import { AvatarEditSheet } from "./profile/avatar-edit-sheet"
 import { ProfileGuestView } from "./profile/profile-guest-view"
 import { ProfileHeader } from "./profile/profile-header"
 import { ProfileEmailVerification } from "./profile/profile-email-verification"
@@ -19,6 +20,8 @@ export function ProfileScreen() {
     loggingOut,
     editOpen,
     setEditOpen,
+    avatarOpen,
+    setAvatarOpen,
     upgradeEmail,
     setUpgradeEmail,
     upgradePassword,
@@ -57,7 +60,11 @@ export function ProfileScreen() {
       </header>
 
       <div className="flex-1 overflow-y-auto pb-28">
-        <ProfileHeader user={user} onEdit={() => setEditOpen(true)} />
+        <ProfileHeader
+          user={user}
+          onEdit={() => setEditOpen(true)}
+          onEditAvatar={() => setAvatarOpen(true)}
+        />
 
         {!user.guest && user.email && user.email_verified === false && (
           <ProfileEmailVerification
@@ -115,6 +122,7 @@ export function ProfileScreen() {
       </div>
 
       <EditProfileSheet open={editOpen} onOpenChange={setEditOpen} />
+      <AvatarEditSheet open={avatarOpen} onOpenChange={setAvatarOpen} />
     </div>
   )
 }

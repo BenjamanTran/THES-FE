@@ -4,7 +4,7 @@ import { useState } from "react"
 import { useRouter } from "next/navigation"
 import { Home, Map, User, Plus, Compass, CalendarCheck, Settings, LogOut, LogIn, Loader2 } from "lucide-react"
 import { cn } from "@/lib/utils"
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
+import { UserAvatar } from "./user-avatar"
 import type { AppTab } from "./bottom-nav"
 import { useAuth } from "@/lib/auth-context"
 
@@ -36,13 +36,6 @@ export function DesktopSidebar({ activeTab, onTabChange, onCreateMatch }: Deskto
     }
   }
 
-  const initials = (() => {
-    if (!user?.name) return "?"
-    const parts = user.name.trim().split(/\s+/)
-    const last = parts[parts.length - 1] || user.name
-    return last.charAt(0).toUpperCase()
-  })()
-
   return (
     <div className="w-64 bg-sidebar/95 backdrop-blur-xl border-r border-sidebar-border flex flex-col text-sidebar-foreground">
       {/* Logo */}
@@ -60,12 +53,11 @@ export function DesktopSidebar({ activeTab, onTabChange, onCreateMatch }: Deskto
       <div className="p-4 border-b border-sidebar-border">
         {user ? (
           <div className="flex items-center gap-3 p-3 rounded-2xl bg-sidebar-accent">
-            <Avatar className="w-10 h-10 ring-2 ring-primary/30">
-              <AvatarImage src="/placeholder.svg?height=40&width=40" alt="User" />
-              <AvatarFallback className="bg-primary/20 text-primary font-bold">
-                {initials}
-              </AvatarFallback>
-            </Avatar>
+            <UserAvatar
+              name={user.name}
+              avatarUrl={user.avatar_url}
+              className="w-10 h-10 ring-2 ring-primary/30"
+            />
             <div className="flex-1 min-w-0">
               <p className="font-semibold text-foreground truncate">{user.name}</p>
               <p className="text-xs text-muted-foreground truncate">{user.email}</p>

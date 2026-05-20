@@ -39,6 +39,21 @@ export function updateProfile(params: UpdateProfileParams) {
   })
 }
 
+export function uploadAvatar(file: File) {
+  const form = new FormData()
+  form.append("avatar", file)
+  return request<AuthResponse>("/api/v1/me/avatar", {
+    method: "POST",
+    body: form,
+  })
+}
+
+export function deleteAvatar() {
+  return request<AuthResponse>("/api/v1/me/avatar", {
+    method: "DELETE",
+  })
+}
+
 export function upgradeGuest(params: {
   email: string
   password: string

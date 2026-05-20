@@ -8,6 +8,7 @@ export function useProfileScreen() {
   const { user, logout, refresh } = useAuth()
   const [loggingOut, setLoggingOut] = useState(false)
   const [editOpen, setEditOpen] = useState(false)
+  const [avatarOpen, setAvatarOpen] = useState(false)
   const [upgradeEmail, setUpgradeEmail] = useState("")
   const [upgradePassword, setUpgradePassword] = useState("")
   const [upgradeConfirm, setUpgradeConfirm] = useState("")
@@ -67,6 +68,8 @@ export function useProfileScreen() {
     loggingOut,
     editOpen,
     setEditOpen,
+    avatarOpen,
+    setAvatarOpen,
     upgradeEmail,
     setUpgradeEmail,
     upgradePassword,

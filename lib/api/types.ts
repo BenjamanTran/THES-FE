@@ -73,6 +73,7 @@ export interface Game {
 export interface GamePlayer {
   id: number
   name: string | null
+  avatar_url?: string | null
   gender?: Gender
   rank?: PlayerRank | null
   declared_rank?: PlayerRank | null
@@ -93,6 +94,7 @@ export interface GameMatchCounts {
 export interface MatchPlayer {
   id: number
   name: string | null
+  avatar_url?: string | null
   gender?: Gender
   rank?: PlayerRank | null
 }
@@ -207,6 +209,7 @@ export interface AuthUser {
   id: number
   email: string | null
   name: string
+  avatar_url?: string | null
   gender: Gender
   phone: string | null
   guest?: boolean

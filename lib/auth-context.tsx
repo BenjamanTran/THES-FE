@@ -18,6 +18,8 @@ import {
   mergeAuthUser,
   signup as apiSignup,
   updateProfile as apiUpdateProfile,
+  uploadAvatar as apiUploadAvatar,
+  deleteAvatar as apiDeleteAvatar,
   type AuthUser,
   type UpdateProfileParams,
 } from "@/lib/api";
@@ -35,6 +37,8 @@ interface AuthContextValue {
   logout: () => Promise<void>;
   refresh: () => Promise<void>;
   updateProfile: (params: UpdateProfileParams) => Promise<AuthUser>;
+  uploadAvatar: (file: File) => Promise<AuthUser>;
+  deleteAvatar: () => Promise<AuthUser>;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -97,9 +101,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return user;
   }, []);
 
+  const uploadAvatar = useCallback(async (file: File) => {
+    const res = await apiUploadAvatar(file);
+    const user = mergeAuthUser(res);
+    setUser(user);
+    return user;
+  }, []);
+
+  const deleteAvatar = useCallback(async () => {
+    const res = await apiDeleteAvatar();
+    const user = mergeAuthUser(res);
+    setUser(user);
+    return user;
+  }, []);
+
   const value = useMemo<AuthContextValue>(
-    () => ({ user, loading, login, signup, logout, refresh, updateProfile }),
-    [user, loading, login, signup, logout, refresh, updateProfile],
+    () => ({ user, loading, login, signup, logout, refresh, updateProfile, uploadAvatar, deleteAvatar }),
+    [user, loading, login, signup, logout, refresh, updateProfile, uploadAvatar, deleteAvatar],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
