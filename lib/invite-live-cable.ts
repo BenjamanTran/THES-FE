@@ -19,11 +19,12 @@ export function matchSummaryToInviteLive(m: MatchSummary): InviteLiveMatch {
     match_number: m.match_number,
     status: m.status,
     priority: m.priority,
+    court_number: m.court_number,
     winner_team: m.winner_team,
     team_a_score: m.team_a_score,
     team_b_score: m.team_b_score,
-    team_a: m.team_a.map((p) => ({ id: p.id, name: p.name })),
-    team_b: m.team_b.map((p) => ({ id: p.id, name: p.name })),
+    team_a: m.team_a.map((p) => ({ id: p.id, name: p.name, avatar_url: p.avatar_url })),
+    team_b: m.team_b.map((p) => ({ id: p.id, name: p.name, avatar_url: p.avatar_url })),
   }
 }
 

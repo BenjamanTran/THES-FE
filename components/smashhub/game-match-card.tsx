@@ -31,6 +31,14 @@ export interface GameMatchCardProps {
   togglingPriorityId?: number | null
 }
 
+function matchPlayerAvatarUrl(
+  p: MatchSummary["team_a"][number],
+  game: GameDetail,
+): string | null {
+  if (p.avatar_url) return p.avatar_url
+  return game.players.find((pl) => pl.id === p.id)?.avatar_url ?? null
+}
+
 function playerMeta(p: MatchSummary["team_a"][number], game: GameDetail) {
   const gp = game.players.find((pl) => pl.id === p.id)
   const gender = p.gender ?? gp?.gender
@@ -137,9 +145,12 @@ export function GameMatchCard({
   const isPending = match.status === "pending"
   const isOngoing = match.status === "ongoing"
   const isFinished = match.status === "finished"
-  const canFinishThis = isParticipant && isOngoing && !!onTapWinner
-  const statusMeta = getMatchStatusMeta(match.status, !!match.winner_team)
   const isFinishing = finishingMatchId === match.id
+  /** Optimistic finish sets status to finished before API returns — keep tap row mounted briefly. */
+  const canFinishThis =
+    isParticipant && !!onTapWinner && (isOngoing || isFinishing)
+  const statusMeta = getMatchStatusMeta(match.status, !!match.winner_team)
+
   const playersNeeded = game.match_type === "singles" ? 2 : 4
   const startBlocked =
     isPending &&
@@ -149,15 +160,48 @@ export function GameMatchCard({
     isFinished && match.team_a_score != null && match.team_b_score != null
 
   const tapBtnClass = cn(
-    "flex-1 min-h-[48px] min-w-0 rounded-lg border-2 border-primary/50 bg-primary/15",
-    "active:scale-[0.98] transition-transform touch-manipulation",
-    "flex items-center justify-center px-2 py-2 text-center",
+    "flex-1 min-h-10 min-w-0 max-w-[50%] rounded-lg border-2 border-primary/50 bg-primary/15",
+    "touch-manipulation flex flex-col items-stretch justify-center px-1.5 py-1 overflow-hidden",
     "hover:bg-primary/25 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary",
+    "active:scale-[0.98] transition-transform",
     isFinishing && "opacity-60 pointer-events-none",
   )
 
-  const teamTapNames = (team: MatchSummary["team_a"]) =>
-    team.map((p) => p.name?.split(/\s+/).pop() || "?").join(" - ")
+  const renderTeamTapPlayers = (team: MatchSummary["team_a"]) => (
+    <>
+      {team.map((p) => {
+        const avatarUrl = matchPlayerAvatarUrl(p, game)
+        return (
+          <div key={p.id} className="flex w-full min-w-0 justify-center">
+            <div className="mx-auto flex min-w-0 max-w-full flex-row items-center justify-center gap-1.5">
+              {avatarUrl ? (
+                <div
+                  className={cn(
+                    "shrink-0 rounded-full ring-1",
+                    "ring-[color-mix(in_oklab,var(--primary)_30%,transparent)]",
+                  )}
+                >
+                  <div className="h-6 w-6 rounded-full overflow-hidden bg-background">
+                    <img
+                      src={avatarUrl}
+                      alt=""
+                      loading="lazy"
+                      decoding="async"
+                      fetchPriority="low"
+                      className="h-full w-full object-cover"
+                    />
+                  </div>
+                </div>
+              ) : null}
+              <span className="min-w-0 max-w-full text-center text-[12px] font-bold leading-tight text-foreground break-words">
+                {p.name || `#${p.id}`}
+              </span>
+            </div>
+          </div>
+        )
+      })}
+    </>
+  )
 
   const centerContent = hasScores ? (
     <div className="flex flex-col items-center gap-0 leading-none">
@@ -196,6 +240,16 @@ export function GameMatchCard({
         <span className="text-xs font-bold text-foreground tabular-nums shrink-0">
           #{match.match_number}
         </span>
+        {match.court_number != null ? (
+          <span
+            className={cn(
+              "text-[10px] font-semibold tabular-nums shrink-0",
+              isOngoing ? "text-emerald-700 dark:text-emerald-400" : "text-muted-foreground",
+            )}
+          >
+            Sân {match.court_number}
+          </span>
+        ) : null}
         {match.priority && isPending ? (
           <Star className="w-3 h-3 shrink-0 fill-amber-500 text-amber-500" aria-label="Ưu tiên" />
         ) : null}
@@ -274,18 +328,17 @@ export function GameMatchCard({
       </div>
 
       {canFinishThis ? (
-        <div className="space-y-1">
-          <div className="flex gap-1.5 items-stretch">
+        <div className="space-y-1 min-w-0">
+          <div className="flex gap-1.5 items-stretch min-w-0">
             <button
               type="button"
               disabled={isFinishing}
               onClick={() => onTapWinner!(match, "team_a")}
               className={tapBtnClass}
             >
-              <span className="text-[13px] font-bold leading-snug text-foreground break-words whitespace-normal w-full">
-                {teamTapNames(match.team_a)}{" "}
-                <span className="text-[11px] font-bold text-primary tracking-wide">(THẮNG)</span>
-              </span>
+              <div className="flex w-full flex-col items-stretch gap-1">
+                {renderTeamTapPlayers(match.team_a)}
+              </div>
             </button>
             <button
               type="button"
@@ -293,10 +346,9 @@ export function GameMatchCard({
               onClick={() => onTapWinner!(match, "team_b")}
               className={tapBtnClass}
             >
-              <span className="text-[13px] font-bold leading-snug text-foreground break-words whitespace-normal w-full">
-                {teamTapNames(match.team_b)}{" "}
-                <span className="text-[11px] font-bold text-primary tracking-wide">(THẮNG)</span>
-              </span>
+              <div className="flex w-full flex-col items-stretch gap-1">
+                {renderTeamTapPlayers(match.team_b)}
+              </div>
             </button>
           </div>
           {onOpenScoreEntry ? (
@@ -313,7 +365,7 @@ export function GameMatchCard({
         <TeamsRow match={match} game={game} center={centerContent} />
       )}
 
-      {isFinished && match.winner_team && !hasScores ? (
+      {isFinished && match.winner_team && !hasScores && !canFinishThis ? (
         <div className="flex items-center justify-center gap-1 mt-1 text-[10px] text-amber-400 font-semibold">
           <Trophy className="w-3 h-3" />
           {match.winner_team === "team_a" ? "A" : "B"} thắng

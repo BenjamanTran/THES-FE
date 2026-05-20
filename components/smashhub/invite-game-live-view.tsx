@@ -5,9 +5,11 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { GenderIcon } from "./gender-icon"
 import { SkillBadge } from "./skill-badge"
+import { UserAvatar } from "./user-avatar"
 import { ratingToStars } from "@/lib/rating-stars"
 import type { InviteGameInfo, InviteLiveMatch, InviteLivePlayer } from "@/lib/api"
 import { playerDisplayName } from "@/lib/player-display-name"
+import { resolveDisplayCourtNumber } from "@/lib/match-court-display"
 import { cn } from "@/lib/utils"
 
 interface InviteGameLiveViewProps {
@@ -30,17 +32,57 @@ function formatTime(iso: string) {
 
 function teamLine(match: InviteLiveMatch, side: "team_a" | "team_b") {
   const team = side === "team_a" ? match.team_a : match.team_b
-  const label = team.map((p) => playerDisplayName(p.name, p.id)).join(" · ")
   const won = match.status === "finished" && match.winner_team === side
+  const alignRight = side === "team_b"
   return (
-    <span className={cn(won && "text-primary font-semibold")}>
-      {label}
-      {won ? " (THẮNG)" : ""}
-    </span>
+    <div
+      className={cn(
+        "min-w-0 space-y-0.5",
+        alignRight && "text-right",
+        won && "text-primary font-semibold",
+      )}
+    >
+      {team.map((p) => (
+        <div
+          key={p.id}
+          className={cn(
+            "flex w-full min-w-0 items-center gap-1.5",
+            alignRight ? "flex-row-reverse justify-start" : "justify-start",
+          )}
+        >
+          <UserAvatar
+            name={p.name}
+            avatarUrl={p.avatar_url}
+            className="size-5 shrink-0"
+            fallbackClassName="text-[8px]"
+          />
+          <span
+            className={cn(
+              "min-w-0 flex-1 truncate leading-tight",
+              alignRight ? "text-right" : "text-left",
+            )}
+          >
+            {playerDisplayName(p.name, p.id)}
+          </span>
+        </div>
+      ))}
+      {won ? (
+        <div className="text-[10px] font-semibold leading-none pt-0.5">(THẮNG)</div>
+      ) : null}
+    </div>
   )
 }
 
-function MatchRow({ match }: { match: InviteLiveMatch }) {
+function MatchRow({
+  match,
+  allMatches,
+  gameCourts,
+}: {
+  match: InviteLiveMatch
+  allMatches: InviteLiveMatch[]
+  gameCourts?: number[] | null
+}) {
+  const displayCourt = resolveDisplayCourtNumber(match, allMatches, gameCourts)
   const hasScore =
     match.team_a_score != null &&
     match.team_b_score != null &&
@@ -60,6 +102,20 @@ function MatchRow({ match }: { match: InviteLiveMatch }) {
     >
       <div className="flex items-center gap-1.5 mb-0.5">
         <span className="text-muted-foreground font-medium">#{match.match_number}</span>
+        {displayCourt != null && (
+          <span
+            className={cn(
+              "text-[10px] font-semibold tabular-nums",
+              match.status === "ongoing"
+                ? "text-emerald-700 dark:text-emerald-400"
+                : match.status === "pending"
+                  ? "text-amber-700/90 dark:text-amber-400/90"
+                  : "text-muted-foreground",
+            )}
+          >
+            Sân {displayCourt}
+          </span>
+        )}
         {match.priority && match.status === "pending" && (
           <span className="text-[10px] text-amber-600 font-semibold">★</span>
         )}
@@ -69,9 +125,11 @@ function MatchRow({ match }: { match: InviteLiveMatch }) {
           </span>
         )}
       </div>
-      <p className="font-medium leading-snug">
-        {teamLine(match, "team_a")} vs {teamLine(match, "team_b")}
-      </p>
+      <div className="font-medium leading-snug grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] gap-x-2 gap-y-0 items-start">
+        <div className="min-w-0 text-left">{teamLine(match, "team_a")}</div>
+        <span className="text-muted-foreground font-normal shrink-0 self-center px-0.5">vs</span>
+        <div className="min-w-0 text-right">{teamLine(match, "team_b")}</div>
+      </div>
     </li>
   )
 }
@@ -159,7 +217,13 @@ export function InviteGameLiveView({
                   ? ratingToStars(p.rank.tier, p.rank.rating)
                   : null
             return (
-              <li key={p.id} className="flex items-start gap-2 px-3 py-2 text-sm">
+              <li key={p.id} className="flex items-center gap-2.5 px-3 py-2 text-sm">
+                <UserAvatar
+                  name={p.name}
+                  avatarUrl={p.avatar_url}
+                  className="h-9 w-9 shrink-0"
+                  fallbackClassName="text-xs"
+                />
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-1.5 min-w-0">
                     <span className="font-medium truncate">
@@ -228,7 +292,12 @@ export function InviteGameLiveView({
                 </p>
                 <ul className="space-y-1.5">
                   {ongoing.map((m) => (
-                    <MatchRow key={m.id} match={m} />
+                    <MatchRow
+                      key={m.id}
+                      match={m}
+                      allMatches={matches}
+                      gameCourts={game.courts}
+                    />
                   ))}
                 </ul>
               </div>
@@ -241,7 +310,12 @@ export function InviteGameLiveView({
                 {pending.length > 0 ? (
                   <ul className="space-y-1.5 max-h-56 overflow-y-auto pr-0.5">
                     {pending.map((m) => (
-                      <MatchRow key={m.id} match={m} />
+                      <MatchRow
+                        key={m.id}
+                        match={m}
+                        allMatches={matches}
+                        gameCourts={game.courts}
+                      />
                     ))}
                   </ul>
                 ) : (
@@ -264,7 +338,12 @@ export function InviteGameLiveView({
                   )}
                 >
                   {finished.map((m) => (
-                    <MatchRow key={m.id} match={m} />
+                    <MatchRow
+                      key={m.id}
+                      match={m}
+                      allMatches={matches}
+                      gameCourts={game.courts}
+                    />
                   ))}
                 </ul>
               </div>

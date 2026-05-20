@@ -109,6 +109,7 @@ export interface MatchSummary {
   started_at?: string | null
   finished_at?: string | null
   priority?: boolean
+  court_number?: number | null
   team_a: MatchPlayer[]
   team_b: MatchPlayer[]
 }
@@ -245,12 +246,14 @@ export interface InviteGameInfo {
   end_time: string
   location: string | null
   host_name: string | null
+  courts?: number[] | null
   mode: InviteGameMode
 }
 
 export interface InviteLivePlayer {
   id: number
   name: string | null
+  avatar_url?: string | null
   gender?: Gender
   rank?: PlayerRank | null
   host_rated_tier?: Tier | null
@@ -263,11 +266,12 @@ export interface InviteLiveMatch {
   match_number: number
   status: "pending" | "ongoing" | "finished"
   priority?: boolean
+  court_number?: number | null
   winner_team?: "team_a" | "team_b" | null
   team_a_score?: number | null
   team_b_score?: number | null
-  team_a: Array<{ id: number; name: string | null }>
-  team_b: Array<{ id: number; name: string | null }>
+  team_a: Array<{ id: number; name: string | null; avatar_url?: string | null }>
+  team_b: Array<{ id: number; name: string | null; avatar_url?: string | null }>
 }
 
 export interface InviteResponse {
