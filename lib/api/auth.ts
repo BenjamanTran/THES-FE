@@ -1,8 +1,8 @@
 import { request } from "./client"
-import type { AuthResponse, AuthUser, UpdateProfileParams } from "./types"
+import type { AuthResponse, AuthUser, RecentActivityResponse, UpdateProfileParams } from "./types"
 
 export function mergeAuthUser(res: AuthResponse): AuthUser {
-  return { ...res.user, stats: res.stats }
+  return { ...res.user, stats: res.stats, profile: res.profile }
 }
 
 export function signup(params: {
@@ -30,6 +30,14 @@ export function logout() {
 
 export function fetchMe() {
   return request<AuthResponse>("/api/v1/me")
+}
+
+export function fetchMyActivity(offset = 0, limit = 20) {
+  const params = new URLSearchParams({
+    offset: String(offset),
+    limit: String(limit),
+  })
+  return request<RecentActivityResponse>(`/api/v1/me/activity?${params}`)
 }
 
 export function updateProfile(params: UpdateProfileParams) {

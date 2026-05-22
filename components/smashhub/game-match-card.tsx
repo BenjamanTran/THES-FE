@@ -8,7 +8,7 @@ import { MatchStatusBadge, getMatchStatusMeta } from "./match-status-badge"
 import { ratingToStars } from "@/lib/rating-stars"
 import { cn } from "@/lib/utils"
 import type { GameDetail, MatchSummary } from "@/lib/api"
-import { isMatchStartable } from "@/lib/suggest-next-match"
+import { getPendingStartBlockReason } from "@/lib/suggest-next-match"
 
 export interface GameMatchCardProps {
   match: MatchSummary
@@ -25,10 +25,15 @@ export interface GameMatchCardProps {
   onEdit: (match: MatchSummary) => void
   onDelete: (matchId: number) => void
   highlighted?: boolean
+  /** All matches in this game — used for court-capacity start blocking */
+  allMatches?: MatchSummary[]
   /** Players currently in an ongoing match — pending start disabled when overlap */
   busyPlayerIds?: Set<number>
   onTogglePriority?: (match: MatchSummary) => void
   togglingPriorityId?: number | null
+  /** Lineup preview while waiting for a free court — no start / finish controls */
+  prepMode?: boolean
+  prepHint?: string
 }
 
 function matchPlayerAvatarUrl(
@@ -138,6 +143,7 @@ export function GameMatchCard({
   onEdit,
   onDelete,
   highlighted,
+  allMatches,
   busyPlayerIds,
   onTogglePriority,
   togglingPriorityId,
@@ -152,10 +158,11 @@ export function GameMatchCard({
   const statusMeta = getMatchStatusMeta(match.status, !!match.winner_team)
 
   const playersNeeded = game.match_type === "singles" ? 2 : 4
-  const startBlocked =
-    isPending &&
-    busyPlayerIds != null &&
-    !isMatchStartable(match, busyPlayerIds, playersNeeded)
+  const startBlockReason =
+    isPending && allMatches && busyPlayerIds
+      ? getPendingStartBlockReason(match, game, allMatches, busyPlayerIds, playersNeeded)
+      : null
+  const startBlocked = isPending && !!startBlockReason
   const hasScores =
     isFinished && match.team_a_score != null && match.team_b_score != null
 
@@ -262,11 +269,7 @@ export function GameMatchCard({
               className="rounded-full h-8 px-2.5 text-[11px] bg-emerald-600 hover:bg-emerald-700 text-white disabled:opacity-50"
               onClick={() => onStartMatch(match.id)}
               disabled={startingMatchId === match.id || startBlocked}
-              title={
-                startBlocked
-                  ? "Có người trong trận này đang đấu trên sân khác"
-                  : undefined
-              }
+              title={startBlockReason ?? undefined}
             >
               {startingMatchId === match.id ? (
                 <Loader2 className="w-3.5 h-3.5 animate-spin" />

@@ -18,6 +18,7 @@ export interface PlayerRank {
   wins?: number
   losses?: number
   matches_count?: number
+  play_time_seconds?: number
   host_rating_count?: number
   host_base_rating?: number | null
   match_points?: number
@@ -36,6 +37,44 @@ export interface UserStats {
   weekly_gr: WeeklyGr
   global_rank: number | null
   win_rate: number | null
+  favorite_venue?: string | null
+}
+
+export interface AchievementProgress {
+  current: number
+  target: number
+}
+
+export interface Achievement {
+  id: string
+  name: string
+  icon: string
+  unlocked: boolean
+  progress?: AchievementProgress | null
+}
+
+export type RecentActivityType = "match_win" | "match_loss" | "game_join" | "achievement"
+
+export interface RecentActivityItem {
+  type: RecentActivityType
+  title: string
+  subtitle?: string | null
+  gr_delta?: number | null
+  occurred_at: string
+  game_id?: number | null
+  badge?: string | null
+}
+
+export interface RecentActivityResponse {
+  recent_activity: RecentActivityItem[]
+  has_more: boolean
+  next_offset: number
+}
+
+export interface UserProfile {
+  achievements: Achievement[]
+  recent_activity: RecentActivityItem[]
+  recent_activity_has_more?: boolean
 }
 
 export interface ParticipantSummary {
@@ -218,6 +257,7 @@ export interface AuthUser {
   rank: PlayerRank | null
   declared_rank?: PlayerRank | null
   stats?: UserStats
+  profile?: UserProfile
 }
 
 export interface UpdateProfileParams {
@@ -231,6 +271,7 @@ export interface UpdateProfileParams {
 export interface AuthResponse {
   user: AuthUser
   stats?: UserStats
+  profile?: UserProfile
 }
 
 export type InviteGameMode = "join" | "live" | "closed"

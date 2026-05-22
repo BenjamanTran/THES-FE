@@ -41,6 +41,10 @@ import {
 import {
   getMatchStartBlockers,
   isMatchStartable,
+  canStartAnotherMatch,
+  countOngoingMatches,
+  getMaxCourts,
+  getPendingStartBlockReason,
   suggestNextMatch,
 } from "@/lib/suggest-next-match"
 import { generateMatchBatchFair } from "@/lib/generate-match-batch"
@@ -614,23 +618,24 @@ export function useGameDetail(gameId: number | null, onClose: () => void) {
   const handleStartMatch = async (matchId: number) => {
     if (!game) return
     const match = game.matches?.find((m) => m.id === matchId)
-    const ongoing = (game.matches ?? []).filter((m) => m.status === "ongoing")
+    const allMatches = game.matches ?? []
+    const ongoing = allMatches.filter((m) => m.status === "ongoing")
     const playersNeeded = game.match_type === "singles" ? 2 : 4
     const busyIds = new Set(
       ongoing.flatMap((m) => [...m.team_a, ...m.team_b].map((p) => p.id)),
     )
-    if (match && !isMatchStartable(match, busyIds, playersNeeded)) {
-      const blockers = getMatchStartBlockers(match, ongoing)
-      if (blockers.length > 0) {
-        const who = [...new Set(blockers.map((b) => b.playerName))].join(", ")
-        const on = [...new Set(blockers.map((b) => `#${b.ongoingMatchNumber}`))].join(", ")
-        toast.error(`${who} đang đấu ${on} — chờ họ xong rồi bắt đầu trận này`)
+    if (match) {
+      const blockReason = getPendingStartBlockReason(
+        match,
+        game,
+        allMatches,
+        busyIds,
+        playersNeeded,
+      )
+      if (blockReason) {
+        toast.error(blockReason)
         return
       }
-      toast.error(
-        `Chưa đủ ${playersNeeded} người trong trận — sửa đội hình trước khi bắt đầu`,
-      )
-      return
     }
     setStartingMatchId(matchId)
     try {
@@ -873,9 +878,12 @@ export function useGameDetail(gameId: number | null, onClose: () => void) {
   }, [game])
 
   const priorityCanStart = useMemo(() => {
-    if (!priorityMatch || !isGameTime) return false
-    return isMatchStartable(priorityMatch, busyPlayerIds, playersNeeded)
-  }, [priorityMatch, busyPlayerIds, playersNeeded, isGameTime])
+    if (!priorityMatch || !isGameTime || !game) return false
+    return (
+      canStartAnotherMatch(game.matches ?? [], getMaxCourts(game)) &&
+      isMatchStartable(priorityMatch, busyPlayerIds, playersNeeded)
+    )
+  }, [priorityMatch, busyPlayerIds, playersNeeded, isGameTime, game])
 
   const priorityReason = useMemo(() => {
     if (!priorityMatch || !game) return ""
@@ -927,10 +935,18 @@ export function useGameDetail(gameId: number | null, onClose: () => void) {
     if (!game || nextSuggestion?.kind !== "create") return
     setSuggestActionLoading(true)
     try {
+      const maxCourts = getMaxCourts(game)
+      const ongoingCount = countOngoingMatches(game.matches ?? [])
       const created = await createMatch(game.id, {
         team_a: nextSuggestion.teamA,
         team_b: nextSuggestion.teamB,
       })
+      if (!canStartAnotherMatch(game.matches ?? [], maxCourts)) {
+        await loadGame(game.id)
+        setMatchTab("queue")
+        toast.info(`Sân đầy (${ongoingCount}/${maxCourts}) — đã thêm hàng chờ`)
+        return
+      }
       await startMatch(game.id, created.id)
       await loadGame(game.id)
       setMatchTab("live")

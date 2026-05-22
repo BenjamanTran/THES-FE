@@ -1,5 +1,21 @@
-import type { MatchSummary } from "@/lib/api"
+import type { GameDetail, MatchSummary } from "@/lib/api"
 import { playerDisplayName } from "@/lib/player-display-name"
+
+export function getMaxCourts(game: Pick<GameDetail, "courts">): number {
+  return Math.max(1, game.courts?.length ?? 1)
+}
+
+export function countOngoingMatches(matches: MatchSummary[]): number {
+  return matches.filter((m) => m.status === "ongoing").length
+}
+
+/** True when another match can start (ongoing count < configured courts). */
+export function canStartAnotherMatch(
+  matches: MatchSummary[],
+  maxCourts: number,
+): boolean {
+  return countOngoingMatches(matches) < maxCourts
+}
 
 export function getOngoingBusyIds(matches: MatchSummary[]): Set<number> {
   return new Set(
@@ -17,6 +33,30 @@ export function isMatchStartable(
   const roster = [...match.team_a, ...match.team_b]
   if (roster.length < playersNeeded) return false
   return roster.every((p) => !busyIds.has(p.id))
+}
+
+export function getPendingStartBlockReason(
+  match: MatchSummary,
+  game: GameDetail,
+  matches: MatchSummary[],
+  busyIds: Set<number>,
+  playersNeeded: number,
+): string | null {
+  const maxCourts = getMaxCourts(game)
+  const ongoing = matches.filter((m) => m.status === "ongoing")
+  if (!canStartAnotherMatch(matches, maxCourts)) {
+    return `Sân đầy (${ongoing.length}/${maxCourts}) — kết thúc trận trên sân trước`
+  }
+  if (!isMatchStartable(match, busyIds, playersNeeded)) {
+    const blockers = getMatchStartBlockers(match, ongoing)
+    if (blockers.length > 0) {
+      const who = [...new Set(blockers.map((b) => b.playerName))].join(", ")
+      const on = [...new Set(blockers.map((b) => `#${b.ongoingMatchNumber}`))].join(", ")
+      return `${who} đang đấu ${on}`
+    }
+    return `Chưa đủ ${playersNeeded} người trong trận`
+  }
+  return null
 }
 
 function busyCountInMatch(match: MatchSummary, busyIds: Set<number>) {

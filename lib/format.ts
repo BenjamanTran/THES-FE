@@ -15,6 +15,18 @@ export function formatPriceRange(min: number, max: number): string {
   return `${formatVnd(safeMin)} – ${formatVnd(safeMax)}`;
 }
 
+export function formatPlayTime(seconds: number): string {
+  if (!Number.isFinite(seconds) || seconds <= 0) return "0 giờ";
+  const hours = seconds / 3600;
+  if (hours < 1) {
+    const mins = Math.max(1, Math.round(seconds / 60));
+    return `${mins} phút`;
+  }
+  const rounded = Math.round(hours * 10) / 10;
+  if (Number.isInteger(rounded)) return `${rounded} giờ`;
+  return `${rounded.toLocaleString("vi-VN")} giờ`;
+}
+
 export function formatVndShort(value: number): string {
   if (!Number.isFinite(value) || value <= 0) return '0đ';
   if (value >= 1_000_000) {

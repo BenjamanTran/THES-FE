@@ -818,6 +818,7 @@ export function GameDetailView({ vm }: { vm: GameDetailViewModel }) {
                           onEdit={openEditMatch}
                           onDelete={handleDeleteMatch}
                           highlighted={suggestedMatchId === match.id}
+                          allMatches={game.matches ?? []}
                           busyPlayerIds={busyPlayerIds}
                           onTogglePriority={canManage ? handleTogglePriority : undefined}
                           togglingPriorityId={togglingPriorityId}

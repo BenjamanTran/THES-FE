@@ -14,7 +14,7 @@ import {
 import type { NextMatchSuggestion } from "./types"
 
 /** Prefer "Tạo & bắt đầu" over hàng chờ when min/max played in player list differs by at least this much. */
-const CREATE_OVER_QUEUE_MIN_SPREAD = 3
+const CREATE_OVER_QUEUE_MIN_SPREAD = 1
 
 function idealLineup(
   players: GamePlayer[],
@@ -98,7 +98,7 @@ export function suggestNextMatch(
       }
     }
 
-    // Lệch ≥ 3 trận: ghép người rảnh thay vì chỉ dùng hàng chờ
+    // Lệch ≥ 1 trận: ghép người rảnh thay vì chỉ dùng hàng chờ
     if (canStartMore && idealCreate && preferCreateOverQueue) {
       const { teamA, teamB } = idealCreate
       const fairReason = fairnessReason(teamA, teamB, players, startFairness)

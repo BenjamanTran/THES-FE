@@ -10,9 +10,10 @@ import { ProfileEmailVerification } from "./profile/profile-email-verification"
 import { ProfilePersonalInfoCard } from "./profile/profile-personal-info-card"
 import { ProfileGuestUpgrade } from "./profile/profile-guest-upgrade"
 import { ProfileSkillStatsCard } from "./profile/profile-skill-stats-card"
-import { ProfileMockSections } from "./profile/profile-mock-sections"
+import { ProfileWinLossCard } from "./profile/profile-win-loss-card"
+import { ProfileQuickStatsCard } from "./profile/profile-quick-stats-card"
+import { ProfileFeedSections } from "./profile/profile-feed-sections"
 import { useProfileScreen } from "./profile/use-profile-screen"
-import { userStatsMock } from "./profile/mock-data"
 
 export function ProfileScreen() {
   const {
@@ -43,9 +44,8 @@ export function ProfileScreen() {
     return <ProfileGuestView />
   }
 
-  const userStats = { ...userStatsMock, name: user.name, email: user.email }
   const declaredRank = user.declared_rank ?? user.rank
-  const matchStats = user.rank
+  const matchStats = user.rank ?? null
   const apiStats = user.stats
 
   return (
@@ -102,7 +102,14 @@ export function ProfileScreen() {
           matchStats={matchStats}
         />
 
-        <ProfileMockSections userStats={userStats} />
+        <ProfileWinLossCard matchStats={matchStats} />
+
+        <ProfileQuickStatsCard
+          matchStats={matchStats}
+          favoriteVenue={apiStats?.favorite_venue}
+        />
+
+        <ProfileFeedSections profile={user.profile} />
 
         <div className="px-4 pb-4">
           <Button
