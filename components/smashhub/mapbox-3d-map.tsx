@@ -118,6 +118,10 @@ export function Mapbox3DMap({
     mapboxgl.accessToken = token;
     if (!mapContainer.current) return;
 
+    const container = mapContainer.current;
+    const resizeObserver = new ResizeObserver(() => map.current?.resize());
+    resizeObserver.observe(container);
+
     function initMap(center: [number, number]) {
       if (cancelled || !mapContainer.current) return;
 
@@ -139,8 +143,12 @@ export function Mapbox3DMap({
         antialias: true,
       });
 
+      requestAnimationFrame(() => map.current?.resize());
+
       map.current.on('load', () => {
         if (cancelled || !map.current) return;
+
+        map.current.resize();
 
         if (showTerrain && !map.current.getSource('mapbox-dem')) {
           map.current.addSource('mapbox-dem', {
@@ -220,6 +228,7 @@ export function Mapbox3DMap({
 
     return () => {
       cancelled = true;
+      resizeObserver.disconnect();
       if (fetchTimer.current) clearTimeout(fetchTimer.current);
       if (map.current) {
         map.current.remove();
@@ -335,9 +344,9 @@ export function Mapbox3DMap({
   }, [userLocation]);
 
   return (
-    <div className="relative w-full h-full bg-black rounded-2xl overflow-hidden">
+    <div className="absolute inset-0 overflow-hidden bg-black">
       {/* Map Container */}
-      <div ref={mapContainer} className="w-full h-full" />
+      <div ref={mapContainer} className="h-full w-full" />
 
       {/* Top Controls */}
       <div className="absolute top-4 left-4 right-4 z-10 flex gap-2">

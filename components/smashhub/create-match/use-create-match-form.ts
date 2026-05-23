@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react"
 import { createGame, fetchVenues, createVenue, type Game, type Venue } from "@/lib/api"
-import { skillLevels } from "./constants"
+import { skillLevels, timeSlots } from "./constants"
 import type { SkillLevel } from "../skill-badge"
 import { generateCreateMatchFbPost } from "./generate-fb-post"
 import { forwardGeocode } from "@/lib/geocode"
@@ -24,7 +24,7 @@ export function useCreateMatchForm({ open, onOpenChange, onSuccess, initialVenue
     if (now.getHours() >= 22) now.setDate(now.getDate() + 1)
     return now
   })
-  const [selectedTime, setSelectedTime] = useState<string>("18:00")
+  const [selectedTime, setSelectedTime] = useState<string>("")
   const [duration, setDuration] = useState(2)
   const [matchType, setMatchType] = useState<"singles" | "doubles">("doubles")
   const [maxPlayers, setMaxPlayers] = useState(8)
@@ -129,6 +129,23 @@ export function useCreateMatchForm({ open, onOpenChange, onSuccess, initialVenue
     }
   }
 
+  const getAvailableTimeSlots = useCallback((date: Date) => {
+    const isToday = date.toDateString() === new Date().toDateString()
+    if (!isToday) return timeSlots
+    const nowHour = new Date().getHours()
+    return timeSlots.filter((time) => {
+      const [h] = time.split(":").map(Number)
+      return h > nowHour
+    })
+  }, [])
+
+  useEffect(() => {
+    const available = getAvailableTimeSlots(selectedDate)
+    if (selectedTime && !available.includes(selectedTime)) {
+      setSelectedTime("")
+    }
+  }, [selectedDate, selectedTime, getAvailableTimeSlots])
+
   const filteredVenues = venues
 
   const toggleLevel = (level: SkillLevel) => {
@@ -164,7 +181,7 @@ export function useCreateMatchForm({ open, onOpenChange, onSuccess, initialVenue
     })
 
   const handleSubmit = async () => {
-    if (!selectedVenue || selectedCourts.length === 0) return
+    if (!selectedVenue || selectedCourts.length === 0 || !selectedTime) return
     setSubmitting(true)
     setError(null)
 
@@ -208,6 +225,7 @@ export function useCreateMatchForm({ open, onOpenChange, onSuccess, initialVenue
   }
 
   const handleNext = () => {
+    if (step === 2 && !selectedTime) return
     if (step < 3) setStep(step + 1)
     else handleSubmit()
   }
@@ -225,6 +243,7 @@ export function useCreateMatchForm({ open, onOpenChange, onSuccess, initialVenue
     setMatchType("doubles")
     setMaxPlayers(8)
     setSelectedLevels(["newbie", "beginner_plus"])
+    setSelectedTime("")
     setTitle("")
     setDescription("")
     setMinPrice(0)
@@ -263,5 +282,6 @@ export function useCreateMatchForm({ open, onOpenChange, onSuccess, initialVenue
     newVenueCity, setNewVenueCity, addingVenue, detectedCity, setDetectedCity,
     filteredVenues, toggleLevel, toggleCourt, selectVenue,
     handleAddVenue, fbPostFor, handleNext, handleBack, resetAndClose, dates, getDayName,
+    getAvailableTimeSlots,
   }
 }

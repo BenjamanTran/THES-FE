@@ -10,7 +10,7 @@ import { cn } from "@/lib/utils"
 import { SkillBadge, SKILL_LABELS } from "./skill-badge"
 import type { Game, Venue } from "@/lib/api"
 import { formatPriceRange } from "@/lib/format"
-import { COURT_OPTIONS, formatCourtList, skillLevels, timeSlots } from "./create-match/constants"
+import { COURT_OPTIONS, formatCourtList, skillLevels } from "./create-match/constants"
 import { useCreateMatchForm } from "./create-match/use-create-match-form"
 
 interface CreateMatchModalProps {
@@ -35,7 +35,7 @@ export function CreateMatchModal({ open, onOpenChange, onSuccess, initialVenue }
     newVenueCity, setNewVenueCity, addingVenue,
     filteredVenues, toggleLevel, toggleCourt, selectVenue,
     handleAddVenue, fbPostFor, handleNext, handleBack, resetAndClose, dates, getDayName,
-    detectedCity, setDetectedCity,
+    detectedCity, setDetectedCity, getAvailableTimeSlots,
   } = useCreateMatchForm({ open, onOpenChange, onSuccess, initialVenue })
   return (
     <Dialog open={open} onOpenChange={resetAndClose}>
@@ -174,9 +174,9 @@ export function CreateMatchModal({ open, onOpenChange, onSuccess, initialVenue }
                     )}
                   </Card>
 
-                  <Card className="p-3 rounded-2xl border-border/50 flex items-center gap-3">
-                    <MapPin className="w-4 h-4 text-primary flex-shrink-0" />
-                    <div className="flex-1 min-w-0">
+                  <Card className="flex-row items-center gap-3 p-3 py-3 rounded-2xl border-border/50 min-w-0 w-full">
+                    <MapPin className="w-4 h-4 text-primary shrink-0" />
+                    <div className="flex-1 min-w-0 overflow-hidden">
                       <p className="text-sm font-semibold truncate">{selectedVenue.name}</p>
                       {selectedVenue.address && (
                         <p className="text-[10px] text-muted-foreground truncate">{selectedVenue.address}</p>
@@ -373,13 +373,7 @@ export function CreateMatchModal({ open, onOpenChange, onSuccess, initialVenue }
                   Giờ bắt đầu
                 </Label>
                 <div className="grid grid-cols-4 gap-2">
-                  {timeSlots
-                    .filter((time) => {
-                      if (selectedDate.toDateString() !== new Date().toDateString()) return true
-                      const [h] = time.split(":").map(Number)
-                      return h > new Date().getHours()
-                    })
-                    .map((time) => (
+                  {getAvailableTimeSlots(selectedDate).map((time) => (
                     <Button
                       key={time}
                       variant={selectedTime === time ? "default" : "outline"}
@@ -391,6 +385,15 @@ export function CreateMatchModal({ open, onOpenChange, onSuccess, initialVenue }
                     </Button>
                   ))}
                 </div>
+                {getAvailableTimeSlots(selectedDate).length === 0 ? (
+                  <p className="text-[10px] text-amber-600 dark:text-amber-400 mt-2">
+                    Không còn khung giờ hôm nay — chọn ngày khác
+                  </p>
+                ) : !selectedTime ? (
+                  <p className="text-[10px] text-amber-600 dark:text-amber-400 mt-2">
+                    Chọn giờ bắt đầu để tiếp tục
+                  </p>
+                ) : null}
               </div>
 
               {/* Duration */}
@@ -639,13 +642,15 @@ export function CreateMatchModal({ open, onOpenChange, onSuccess, initialVenue }
                   </div>
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">Giờ</span>
-                    <span className="font-medium">{selectedTime} - {
-                      (() => {
-                        const [h, m] = selectedTime.split(":").map(Number)
-                        const endH = h + duration
-                        return `${String(endH).padStart(2, "0")}:${String(m).padStart(2, "0")}`
-                      })()
-                    }</span>
+                    <span className="font-medium">
+                      {selectedTime
+                        ? `${selectedTime} - ${(() => {
+                            const [h, m] = selectedTime.split(":").map(Number)
+                            const endH = h + duration
+                            return `${String(endH).padStart(2, "0")}:${String(m).padStart(2, "0")}`
+                          })()}`
+                        : "Chưa chọn"}
+                    </span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">Loại trận</span>
@@ -692,7 +697,11 @@ export function CreateMatchModal({ open, onOpenChange, onSuccess, initialVenue }
             <Button
               className="flex-1 rounded-full"
               onClick={handleNext}
-              disabled={(step === 1 && (!selectedVenue || selectedCourts.length === 0)) || submitting}
+              disabled={
+                (step === 1 && (!selectedVenue || selectedCourts.length === 0)) ||
+                (step === 2 && !selectedTime) ||
+                submitting
+              }
             >
               {submitting && <Loader2 className="w-4 h-4 animate-spin mr-2" />}
               {submitting ? "Đang tạo..." : step === 3 ? "Tạo trận đấu" : "Tiếp theo"}

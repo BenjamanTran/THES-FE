@@ -66,8 +66,8 @@ export function MapScreen({ onOpenGame }: MapScreenProps = {}) {
   }
 
   return (
-    <div className="flex flex-col h-full">
-      <header className="glass-dark sticky top-0 z-40 px-4 pt-4 pb-3 safe-top border-b border-border/20">
+    <div className="flex flex-col h-full min-h-0 overflow-hidden">
+      <header className="glass-dark shrink-0 z-40 px-4 pb-3 safe-top border-b border-border/20">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <h1 className="text-xl font-bold">Tìm trận</h1>
@@ -183,7 +183,7 @@ export function MapScreen({ onOpenGame }: MapScreenProps = {}) {
         )}
       </header>
 
-      <div className="flex-1 relative bg-black">
+      <div className="flex-1 min-h-0 relative bg-black overflow-hidden">
         <Mapbox3DMap
           city={selectedCity}
           statusFilter={appliedStatusFilter}

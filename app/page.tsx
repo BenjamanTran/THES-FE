@@ -14,6 +14,7 @@ import { CreateMatchModal } from "@/components/smashhub/create-match-modal"
 import type { Venue } from "@/lib/api"
 import { GameDetailScreen } from "@/components/smashhub/game-detail-screen"
 import { useAuth, useRequireAuth } from "@/lib/auth-context"
+import { cn } from "@/lib/utils"
 
 function HomeLoading() {
   return (
@@ -128,13 +129,23 @@ function SmashHubPro() {
     }
   }
 
+  const isMapTab = displayTab === "map"
+
   return (
     <>
       {/* Mobile Layout */}
       <div className="lg:hidden min-h-screen bg-background relative overflow-hidden">
-        <main className="h-[100dvh] overflow-y-auto pb-24">
+        <main
+          className={cn(
+            "h-[100dvh] pb-24",
+            isMapTab ? "overflow-hidden" : "overflow-y-auto",
+          )}
+        >
           <div
-            className="transition-opacity duration-150 ease-out h-full"
+            className={cn(
+              "transition-opacity duration-150 ease-out h-full",
+              isMapTab && "min-h-0 overflow-hidden",
+            )}
             style={{ opacity: transitioning ? 0 : 1 }}
           >
             {renderScreen()}
@@ -159,9 +170,17 @@ function SmashHubPro() {
             {/* Phone Frame */}
             <div className="relative w-[390px] h-[844px] bg-background rounded-[3rem] border-[14px] border-border shadow-2xl shadow-black/10 dark:border-neutral-800 dark:shadow-black/50 overflow-hidden">
               {/* Screen Content */}
-              <div className="h-full overflow-y-auto">
+              <div
+                className={cn(
+                  "h-full",
+                  isMapTab ? "overflow-hidden" : "overflow-y-auto",
+                )}
+              >
                 <div
-                  className="transition-opacity duration-150 ease-out h-full"
+                  className={cn(
+                    "transition-opacity duration-150 ease-out h-full",
+                    isMapTab && "min-h-0 overflow-hidden",
+                  )}
                   style={{ opacity: transitioning ? 0 : 1 }}
                 >
                   {renderScreen()}
