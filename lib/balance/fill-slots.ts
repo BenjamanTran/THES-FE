@@ -1,4 +1,6 @@
 import type { GamePlayer } from "../api"
+import type { PairBalanceOptions } from "../player-pairs"
+import { pairSplitPenalty } from "../player-pairs"
 import type { BalanceResult, BalanceTier, DoublesGenderMode, ScoredOption } from "./types"
 import { pickByBalanceTier } from "./balance-teams"
 import { calcFairness } from "./fairness"
@@ -68,7 +70,10 @@ export function fillSlots(
   genderMode: DoublesGenderMode = "any",
   tier: BalanceTier = 0,
   exclude?: BalanceResult,
+  pairOptions?: PairBalanceOptions,
 ): BalanceResult {
+  const pairs = pairOptions?.pairs ?? []
+  const requirePairs = pairOptions?.pairPolicy === "require"
   const slotsA = teamSize - teamA.length
   const slotsB = teamSize - teamB.length
   const totalSlots = slotsA + slotsB
@@ -132,11 +137,18 @@ export function fillSlots(
     }
 
     const diff = calcFairness(newA, newB, allPlayers).diff
-    scored.push({ result: { teamA: newA, teamB: newB }, mcSum, diff })
+    const pairPen = pairSplitPenalty(newA, newB, pairs)
+    if (requirePairs && pairPen > 0) continue
+    scored.push({ result: { teamA: newA, teamB: newB }, mcSum, diff, pairPenalty: pairPen })
   }
 
   if (scored.length === 0) return { teamA: [...teamA], teamB: [...teamB] }
 
-  scored.sort((a, b) => a.mcSum - b.mcSum || a.diff - b.diff)
+  scored.sort(
+    (a, b) =>
+      a.mcSum - b.mcSum ||
+      (a.pairPenalty ?? 0) - (b.pairPenalty ?? 0) ||
+      a.diff - b.diff,
+  )
   return pickByBalanceTier(scored, tier, exclude)
 }

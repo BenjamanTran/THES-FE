@@ -109,6 +109,9 @@ export function rotationFairnessCounts(
   return counts
 }
 
+/** Hide/disable 「Sắp xếp cặp đấu」 when session spread reaches this (inclusive). */
+export const PAIR_ARRANGE_MAX_SPREAD = 2
+
 /** Max − min played in session (same basis as player list "X trận", no pending queue). */
 export function sessionPlayedSpread(
   players: GamePlayer[],

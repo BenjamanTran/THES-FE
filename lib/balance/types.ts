@@ -21,6 +21,7 @@ export interface ScoredOption {
   result: BalanceResult
   mcSum: number
   diff: number
+  pairPenalty?: number
 }
 
 export interface LineupSkillGapInfo {

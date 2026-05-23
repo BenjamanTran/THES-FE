@@ -190,6 +190,17 @@ export interface FinishMatchResponse {
 export interface CreateMatchParams {
   team_a: number[]
   team_b: number[]
+  /** Host "Sắp xếp cặp đấu" — keeps pairs on sides, counts toward quota */
+  arranged_as_pairs?: boolean
+}
+
+export interface GamePlayerPair {
+  id: number
+  user_a_id: number
+  user_b_id: number
+  status: "active" | "dissolved"
+  /** Pair-arranged matches used (「Sắp xếp cặp đấu」), per pair */
+  matches_used?: number
 }
 
 export interface GameDetail extends Game {
@@ -197,6 +208,9 @@ export interface GameDetail extends Game {
   matches: MatchSummary[]
   match_counts?: GameMatchCounts
   priority_match?: MatchSummary | null
+  /** null = unlimited pair-arranged matches per registered pair */
+  pair_matches_limit?: number | null
+  player_pairs?: GamePlayerPair[]
 }
 
 export interface JoinResponse {
@@ -236,6 +250,8 @@ export interface Venue {
 export interface UpdateGameSettingsParams {
   max_players?: number
   courts?: number[]
+  /** null or omit with "unlimited" = no cap; positive integer = max pair-arranged matches */
+  pair_matches_limit?: number | null | "unlimited"
 }
 
 export interface PlaceholderPlayerParams {

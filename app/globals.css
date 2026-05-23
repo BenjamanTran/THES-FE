@@ -284,6 +284,25 @@ html.no-theme-transition *::after {
   animation: fade-in 0.3s ease-out both;
 }
 
+@keyframes suggest-enter {
+  from {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-suggest-enter {
+  animation: suggest-enter 0.28s cubic-bezier(0.4, 0, 0.2, 1) both;
+}
+
+.suggest-expand {
+  will-change: grid-template-rows, opacity;
+}
+
 .animate-fade-in-fast {
   animation: fade-in-fast 0.2s ease-out both;
 }
@@ -316,8 +335,15 @@ html.no-theme-transition *::after {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .match-playing-pulse {
+  .match-playing-pulse,
+  .animate-suggest-enter,
+  .animate-fade-in,
+  .animate-fade-in-fast {
     animation: none;
+  }
+
+  .suggest-expand {
+    transition: none !important;
   }
 }
 

@@ -48,12 +48,19 @@ import {
   suggestNextMatch,
 } from "@/lib/suggest-next-match"
 import { generateMatchBatchFair } from "@/lib/generate-match-batch"
+import { PAIR_ARRANGE_MAX_SPREAD, sessionPlayedSpread } from "@/lib/match-stats"
+import {
+  canArrangePairMatch,
+  pairsFromGame,
+  suggestPairDoublesMatch,
+} from "@/lib/player-pairs"
 import { useGameCable } from "@/hooks/use-game-cable"
 import type { GameCableEvent } from "@/lib/game-cable"
 import { reverseGeocode } from "@/lib/geocode"
 import { ratingToStars } from "@/lib/rating-stars"
 import { fitMeta } from "./meta"
 import { COURT_OPTIONS, MAX_CO_HOSTS, UNDO_MS } from "@/components/smashhub/game-detail/constants"
+import { useGamePlayerPairTap } from "@/components/smashhub/game-detail/game-player-pairs"
 
 export function useGameDetail(gameId: number | null, onClose: () => void) {
   const { user } = useAuth()
@@ -402,6 +409,7 @@ export function useGameDetail(gameId: number | null, onClose: () => void) {
   const [startingMatchId, setStartingMatchId] = useState<number | null>(null)
   const [suggestActionLoading, setSuggestActionLoading] = useState(false)
   const [batchLoading, setBatchLoading] = useState(false)
+  const [pairArrangeLoading, setPairArrangeLoading] = useState(false)
   const [finishingMatchId, setFinishingMatchId] = useState<number | null>(null)
   const [togglingPriorityId, setTogglingPriorityId] = useState<number | null>(null)
   const [pendingUndo, setPendingUndo] = useState<{ matchId: number; label: string } | null>(null)
@@ -909,6 +917,35 @@ export function useGameDetail(gameId: number | null, onClose: () => void) {
 
   const showNextSuggestion = nextSuggestion && !hideSuggestForPriority
 
+  const pairMatchPlan = useMemo(() => {
+    if (!game || game.match_type !== "doubles" || !canPlanMatches) return null
+    return suggestPairDoublesMatch(game, game.players ?? [], game.matches ?? [])
+  }, [game, canPlanMatches])
+
+  const pairSessionSpread = useMemo(() => {
+    if (!game?.players?.length) return 0
+    return sessionPlayedSpread(game.players, game.matches)
+  }, [game?.players, game?.matches])
+
+  const showPairArrange =
+    !!game &&
+    game.match_type === "doubles" &&
+    canPlanMatches &&
+    canManage &&
+    canArrangePairMatch(game) &&
+    pairsFromGame(game.player_pairs).length > 0 &&
+    pairSessionSpread < PAIR_ARRANGE_MAX_SPREAD
+
+  const pairArrangeHint =
+    pairMatchPlan && "error" in pairMatchPlan
+      ? pairMatchPlan.error
+      : pairMatchPlan && "label" in pairMatchPlan
+        ? pairMatchPlan.reason
+        : undefined
+
+  const pairArrangeDisabled =
+    !pairMatchPlan || ("error" in pairMatchPlan && !!pairMatchPlan.error)
+
   const suggestedMatchId =
     nextSuggestion?.kind === "start" ? nextSuggestion.match.id : priorityMatch?.id ?? null
 
@@ -932,14 +969,24 @@ export function useGameDetail(gameId: number | null, onClose: () => void) {
   }
 
   const handleCreateAndStartSuggested = async () => {
-    if (!game || nextSuggestion?.kind !== "create") return
+    if (!game || !nextSuggestion) return
+    const lineup =
+      nextSuggestion.kind === "create"
+        ? { teamA: nextSuggestion.teamA, teamB: nextSuggestion.teamB }
+        : nextSuggestion.kind === "start" && nextSuggestion.altCreate
+          ? {
+              teamA: nextSuggestion.altCreate.teamA,
+              teamB: nextSuggestion.altCreate.teamB,
+            }
+          : null
+    if (!lineup) return
     setSuggestActionLoading(true)
     try {
       const maxCourts = getMaxCourts(game)
       const ongoingCount = countOngoingMatches(game.matches ?? [])
       const created = await createMatch(game.id, {
-        team_a: nextSuggestion.teamA,
-        team_b: nextSuggestion.teamB,
+        team_a: lineup.teamA,
+        team_b: lineup.teamB,
       })
       if (!canStartAnotherMatch(game.matches ?? [], maxCourts)) {
         await loadGame(game.id)
@@ -976,6 +1023,43 @@ export function useGameDetail(gameId: number | null, onClose: () => void) {
     }
   }
 
+  const handleArrangePairMatch = async () => {
+    if (!game) return
+    const plan = suggestPairDoublesMatch(game, game.players ?? [], game.matches ?? [])
+    if ("error" in plan) {
+      toast.error(plan.error)
+      return
+    }
+    setPairArrangeLoading(true)
+    try {
+      const maxCourts = getMaxCourts(game)
+      const ongoingCount = countOngoingMatches(game.matches ?? [])
+      const created = await createMatch(game.id, {
+        team_a: plan.teamA,
+        team_b: plan.teamB,
+        arranged_as_pairs: true,
+      })
+      if (isGameTime && canStartAnotherMatch(game.matches ?? [], maxCourts)) {
+        await startMatch(game.id, created.id)
+        await loadGame(game.id)
+        setMatchTab("live")
+        toast.success("Đã sắp xếp cặp đấu và bắt đầu trận")
+      } else {
+        await loadGame(game.id)
+        setMatchTab("queue")
+        toast.success(
+          isGameTime
+            ? `Sân đầy (${ongoingCount}/${maxCourts}) — đã thêm trận cặp vào hàng chờ`
+            : "Đã thêm trận cặp vào hàng chờ",
+        )
+      }
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Không thể sắp xếp trận cặp")
+    } finally {
+      setPairArrangeLoading(false)
+    }
+  }
+
   const handleGenerateBatch = async (count: 10 = 10) => {
     if (!game) return
     setBatchLoading(true)
@@ -1004,6 +1088,16 @@ export function useGameDetail(gameId: number | null, onClose: () => void) {
   }
 
   const fitInfo = fitMeta(game?.fit_level)
+
+  const reloadGame = useCallback(() => {
+    if (gameId) void loadGame(gameId)
+  }, [gameId, loadGame])
+
+  const { pairPick, loading: pairTapLoading, onPlayerPairTap } = useGamePlayerPairTap(
+    game,
+    canManage,
+    reloadGame,
+  )
 
   return {
     gameId,
@@ -1122,8 +1216,17 @@ export function useGameDetail(gameId: number | null, onClose: () => void) {
     handleCreateAndStartSuggested,
     handleQueueSuggested,
     handleGenerateBatch,
+    handleArrangePairMatch,
+    showPairArrange,
+    pairArrangeHint,
+    pairArrangeDisabled,
+    pairArrangeLoading,
     togglingPriorityId,
     fitInfo,
+    pairPick,
+    pairTapLoading,
+    onPlayerPairTap,
+    reloadGame,
   }
 }
 

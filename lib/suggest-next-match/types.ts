@@ -6,6 +6,13 @@ export type NextMatchSuggestion =
       match: MatchSummary
       label: string
       reason: string
+      /** Khi lệch lượt ≥ 1: ghép mới 4 người rảnh song song với bắt đầu hàng chờ */
+      altCreate?: {
+        teamA: number[]
+        teamB: number[]
+        label: string
+        reason: string
+      }
     }
   | {
       kind: "create"

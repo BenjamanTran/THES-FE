@@ -1,4 +1,6 @@
 import type { GamePlayer } from "../api"
+import type { PairBalanceOptions } from "../player-pairs"
+import { filterValidPairings, pairSplitPenalty } from "../player-pairs"
 import type { BalanceResult, BalanceTier, DoublesGenderMode, ScoredOption } from "./types"
 import { calcFairness } from "./fairness"
 import {
@@ -96,6 +98,14 @@ function pairingOptionsForSubset(
   return results
 }
 
+function compareScored(a: ScoredOption, b: ScoredOption): number {
+  return (
+    a.mcSum - b.mcSum ||
+    (a.pairPenalty ?? 0) - (b.pairPenalty ?? 0) ||
+    a.diff - b.diff
+  )
+}
+
 function collectBalanceOptions(
   pool: GamePlayer[],
   teamSize: number,
@@ -103,7 +113,10 @@ function collectBalanceOptions(
   allPlayers: GamePlayer[],
   matchCounts?: Record<number, number>,
   mixedOnly = false,
+  pairOptions?: PairBalanceOptions,
 ): ScoredOption[] {
+  const pairs = pairOptions?.pairs ?? []
+  const requirePairs = pairOptions?.pairPolicy === "require"
   const totalNeeded = teamSize * 2
   const ids = pool.map((p) => p.id)
   const rosterCombos = pool.length === totalNeeded ? [ids] : combinations(ids, totalNeeded)
@@ -125,15 +138,18 @@ function collectBalanceOptions(
       mixedOnly,
     )) {
       if (pairing.teamA.length < teamSize || pairing.teamB.length < teamSize) continue
+      const pairPen = pairSplitPenalty(pairing.teamA, pairing.teamB, pairs)
+      if (requirePairs && pairPen > 0) continue
       scored.push({
         result: pairing,
         mcSum,
         diff: calcFairness(pairing.teamA, pairing.teamB, allPlayers).diff,
+        pairPenalty: pairPen,
       })
     }
   }
 
-  return scored.sort((a, b) => a.mcSum - b.mcSum || a.diff - b.diff)
+  return scored.sort(compareScored)
 }
 
 /**
@@ -148,7 +164,9 @@ export function balanceTeams(
   genderMode: DoublesGenderMode = "any",
   tier: BalanceTier = 0,
   exclude?: BalanceResult,
+  pairOptions?: PairBalanceOptions,
 ): BalanceResult {
+  const pairs = pairOptions?.pairs ?? []
   if (players.length === 0) return { teamA: [], teamB: [] }
 
   const pool =
@@ -164,6 +182,7 @@ export function balanceTeams(
       players,
       matchCounts,
       genderMode === "mixed" && teamSize === 2,
+      pairOptions,
     )
     const picked = pickByBalanceTier(options, tier, exclude)
     if (picked.teamA.length >= teamSize && picked.teamB.length >= teamSize) return picked
@@ -172,7 +191,15 @@ export function balanceTeams(
   if (genderMode === "mixed" && teamSize === 2) {
     const selected = selectMixedDoublesFour(pool, matchCounts)
     if (!selected || selected.length < totalNeeded) return { teamA: [], teamB: [] }
-    const options = collectBalanceOptions(selected, teamSize, genderMode, players, matchCounts, true)
+    const options = collectBalanceOptions(
+      selected,
+      teamSize,
+      genderMode,
+      players,
+      matchCounts,
+      true,
+      pairOptions,
+    )
     return pickByBalanceTier(options, tier, exclude)
   }
 
@@ -185,10 +212,25 @@ export function balanceTeams(
 
   if (selected.length === 0) return { teamA: [], teamB: [] }
 
-  const options = collectBalanceOptions(selected, teamSize, genderMode, players, matchCounts)
+  const options = collectBalanceOptions(
+    selected,
+    teamSize,
+    genderMode,
+    players,
+    matchCounts,
+    false,
+    pairOptions,
+  )
   if (options.length > 0) return pickByBalanceTier(options, tier, exclude)
 
-  return greedyPartition(selected, teamSize, genderMode, players)
+  const greedy = greedyPartition(selected, teamSize, genderMode, players)
+  if (pairs.length === 0) return greedy
+  if (pairOptions?.pairPolicy === "require" && pairSplitPenalty(greedy.teamA, greedy.teamB, pairs) > 0) {
+    const valid = filterValidPairings([greedy], pairs)
+    if (valid.length > 0) return valid[0]
+    return { teamA: [], teamB: [] }
+  }
+  return greedy
 }
 
 export { pickByBalanceTier }

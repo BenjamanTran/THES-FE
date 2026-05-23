@@ -98,7 +98,31 @@ export function suggestNextMatch(
       }
     }
 
-    // Lệch ≥ 1 trận: ghép người rảnh thay vì chỉ dùng hàng chờ
+    if (canStartMore && startablePending.length > 0) {
+      const match = pickFairestPendingToStart(startablePending, players, matches)
+      const matchReason = fairnessReasonForMatch(match, players, startFairness)
+      const startSuggestion: Extract<NextMatchSuggestion, { kind: "start" }> = {
+        kind: "start",
+        match,
+        label: formatMatchLabel(match),
+        reason:
+          playedSpread < CREATE_OVER_QUEUE_MIN_SPREAD
+            ? `Lệch ${playedSpread} trận (dưới ${CREATE_OVER_QUEUE_MIN_SPREAD}) — bắt đầu từ hàng chờ. ${matchReason}`
+            : `Có ${startablePending.length} trận chờ sẵn sàng. ${matchReason}`,
+      }
+      if (preferCreateOverQueue && idealCreate) {
+        const { teamA, teamB } = idealCreate
+        const fairReason = fairnessReason(teamA, teamB, players, startFairness)
+        startSuggestion.altCreate = {
+          teamA,
+          teamB,
+          label: formatTeamsLabel(teamA, teamB, players),
+          reason: `Lệch ${playedSpread} trận — ghép ${needed} người rảnh theo lượt đã đấu. ${fairReason}`,
+        }
+      }
+      return startSuggestion
+    }
+
     if (canStartMore && idealCreate && preferCreateOverQueue) {
       const { teamA, teamB } = idealCreate
       const fairReason = fairnessReason(teamA, teamB, players, startFairness)
@@ -107,24 +131,7 @@ export function suggestNextMatch(
         teamA,
         teamB,
         label: formatTeamsLabel(teamA, teamB, players),
-        reason:
-          startablePending.length > 0
-            ? `Lệch ${playedSpread} trận — ghép ${needed} người rảnh theo lượt đã đấu. ${fairReason}`
-            : `0/${pending.length} trận chờ sẵn sàng. ${freePlayers.length} người rảnh — ${fairReason}`,
-      }
-    }
-
-    if (canStartMore && startablePending.length > 0) {
-      const match = pickFairestPendingToStart(startablePending, players, matches)
-      const matchReason = fairnessReasonForMatch(match, players, startFairness)
-      return {
-        kind: "start",
-        match,
-        label: formatMatchLabel(match),
-        reason:
-          playedSpread < CREATE_OVER_QUEUE_MIN_SPREAD
-            ? `Lệch ${playedSpread} trận (dưới ${CREATE_OVER_QUEUE_MIN_SPREAD}) — bắt đầu từ hàng chờ. ${matchReason}`
-            : matchReason,
+        reason: `Lệch ${playedSpread} trận — ghép ${needed} người rảnh theo lượt đã đấu. ${fairReason}`,
       }
     }
 

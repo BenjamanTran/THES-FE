@@ -21,7 +21,7 @@ export function PriorityMatchBanner({
   onStart,
 }: PriorityMatchBannerProps) {
   return (
-    <div className="rounded-xl border border-amber-500/50 bg-amber-500/10 px-3 py-2.5 mb-2">
+    <div className="rounded-xl border border-amber-500/50 bg-amber-500/10 px-3 py-2.5 mb-2 transition-colors duration-300">
       <div className="flex items-start gap-2">
         <Star className="w-4 h-4 shrink-0 mt-0.5 fill-amber-500 text-amber-500" aria-hidden />
         <div className="flex-1 min-w-0">

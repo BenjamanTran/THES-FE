@@ -12,3 +12,4 @@ export {
 } from "./start-rules"
 export { findPendingWithLineup, pickFairestPending } from "./lineup-fairness"
 export { suggestNextMatch } from "./suggest"
+export { suggestionAnimateKey } from "./animate-key"

@@ -27,6 +27,7 @@ import {
   Sun,
   Moon,
   Undo2,
+  Link2,
 } from "lucide-react"
 import { UserAvatar } from "../user-avatar"
 import { Badge } from "@/components/ui/badge"
@@ -39,6 +40,8 @@ import { CreateMatchSheet } from "../create-match-sheet"
 import { GameMatchCard } from "../game-match-card"
 import { NextMatchSuggest } from "../next-match-suggest"
 import { PriorityMatchBanner } from "../priority-match-banner"
+import { SuggestStickyPanel } from "../suggest-sticky-panel"
+import { suggestionAnimateKey } from "@/lib/suggest-next-match"
 import { PlaceholderPlayerSheet } from "../placeholder-player-sheet"
 import { ScoreEntryModal } from "../score-entry-modal"
 import { useAppTheme } from "@/lib/theme-provider"
@@ -52,6 +55,8 @@ import { MAX_CO_HOSTS } from "@/components/smashhub/game-detail/constants"
 import type { GameDetailViewModel } from "@/components/smashhub/game-detail/use-game-detail"
 import { GameEditSettingsSheet } from "@/components/smashhub/game-detail/game-edit-settings-sheet"
 import { GameRatingSheet } from "@/components/smashhub/game-detail/game-rating-sheet"
+import { GamePlayerPairs } from "@/components/smashhub/game-detail/game-player-pairs"
+import { partnerIdFor, pairsFromGame } from "@/lib/player-pairs"
 
 export type { GameDetailViewModel }
 
@@ -167,9 +172,30 @@ export function GameDetailView({ vm }: { vm: GameDetailViewModel }) {
     handleCreateAndStartSuggested,
     handleQueueSuggested,
     handleGenerateBatch,
+    handleArrangePairMatch,
+    showPairArrange,
+    pairArrangeHint,
+    pairArrangeDisabled,
+    pairArrangeLoading,
     togglingPriorityId,
     fitInfo,
+    pairPick,
+    pairTapLoading,
+    onPlayerPairTap,
+    reloadGame,
   } = vm
+
+  const showStickySuggest =
+    canPlanMatches &&
+    !!(priorityMatch || showNextSuggestion || showPairArrange)
+  const stickyContentKey = priorityMatch
+    ? `priority-${priorityMatch.id}`
+    : showNextSuggestion && nextSuggestion
+      ? suggestionAnimateKey(nextSuggestion)
+      : showPairArrange
+        ? "pair-arrange"
+        : "idle"
+
   return (
     <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
       <DialogContent
@@ -485,6 +511,17 @@ export function GameDetailView({ vm }: { vm: GameDetailViewModel }) {
                   </Button>
                 )}
 
+                {game.match_type === "doubles" && (
+                  <GamePlayerPairs
+                    game={game}
+                    players={game.players}
+                    canManage={canManage}
+                    pairPick={pairPick}
+                    pairLoading={pairTapLoading}
+                    onUpdated={reloadGame}
+                  />
+                )}
+
                 <div className="space-y-2">
                   {sortedPlayers.map((player) => {
                     const isThisHost = player.id === game.host?.id
@@ -498,8 +535,20 @@ export function GameDetailView({ vm }: { vm: GameDetailViewModel }) {
                       && (isThisCoHost || coHostCount < MAX_CO_HOSTS)
                     const canEditPlaceholder = canManagePlaceholders && isPlaceholder
                     const gameActive = game.status !== "finished" && game.status !== "cancelled"
+                    const sessionPairs = pairsFromGame(game.player_pairs)
+                    const partnerId = partnerIdFor(player.id, sessionPairs)
+                    const partnerName = partnerId
+                      ? game.players.find((p) => p.id === partnerId)?.name
+                      : null
+                    const isPairPickTarget = pairPick === player.id
                     return (
-                      <div key={player.id} className="flex items-center gap-3">
+                      <div
+                        key={player.id}
+                        className={cn(
+                          "flex items-center gap-3 rounded-lg px-1 -mx-1",
+                          isPairPickTarget && "ring-1 ring-primary/50 bg-primary/5",
+                        )}
+                      >
                         <div className="relative flex-shrink-0">
                           <UserAvatar
                             name={player.name}
@@ -517,6 +566,12 @@ export function GameDetailView({ vm }: { vm: GameDetailViewModel }) {
                           <p className="text-sm font-medium truncate">
                             {player.name || `User #${player.id}`}
                             {isMe && <span className="text-xs text-muted-foreground"> (bạn)</span>}
+                            {partnerName && (
+                              <span className="text-[10px] text-primary font-normal ml-1">
+                                <Link2 className="inline w-3 h-3 mr-0.5" />
+                                {partnerName}
+                              </span>
+                            )}
                           </p>
                           <div className="flex items-center gap-1.5 mt-0.5">
                             <SkillBadge level={player.host_rated_tier || player.rank?.tier || null} size="xs" compact />
@@ -583,6 +638,20 @@ export function GameDetailView({ vm }: { vm: GameDetailViewModel }) {
                               </span>
                             )}
                           </div>
+                          {gameActive &&
+                            canManage &&
+                            game.match_type === "doubles" &&
+                            !partnerId &&
+                            onPlayerPairTap && (
+                              <button
+                                type="button"
+                                onClick={() => onPlayerPairTap(player.id)}
+                                className="p-1 rounded-full text-muted-foreground hover:text-primary hover:bg-primary/10 transition-colors"
+                                title="Ghép cặp"
+                              >
+                                <Link2 className="w-3.5 h-3.5" />
+                              </button>
+                            )}
                           {gameActive && (canPromoteThis || canKickThis || canEditPlaceholder) && (
                             <div className="flex items-center gap-0.5 ml-1">
                               {canEditPlaceholder && (
@@ -695,35 +764,51 @@ export function GameDetailView({ vm }: { vm: GameDetailViewModel }) {
                     </div>
                   </div>
 
-                  {canPlanMatches && (priorityMatch || showNextSuggestion) && (
-                    <div className="sticky top-0 z-20 px-4 pb-2 bg-card/95 backdrop-blur-sm border-b border-border/30">
-                      {priorityMatch ? (
-                        <PriorityMatchBanner
-                          match={priorityMatch}
-                          reason={priorityReason}
-                          canStart={priorityCanStart}
-                          loading={
-                            startingMatchId === priorityMatch.id ||
-                            suggestActionLoading
-                          }
-                          onStart={() => void handleStartMatch(priorityMatch.id)}
-                        />
-                      ) : null}
-                      {showNextSuggestion && nextSuggestion ? (
-                      <NextMatchSuggest
-                        suggestion={nextSuggestion}
-                        isGameTime={isGameTime}
-                        loading={suggestActionLoading || startingMatchId != null}
-                        batchLoading={batchLoading}
-                        showBatchActions={pendingMatches.length <= 2}
-                        onStart={handleStartSuggested}
-                        onCreateAndStart={handleCreateAndStartSuggested}
-                        onQueue={handleQueueSuggested}
-                        onGenerateBatch={() => void handleGenerateBatch(10)}
-                      />
-                      ) : null}
+                  {canPlanMatches ? (
+                    <div
+                      className={cn(
+                        "sticky top-0 z-20 px-4 bg-card/95 backdrop-blur-sm transition-[border-color,padding-bottom] duration-300 ease-out",
+                        showStickySuggest
+                          ? "pb-2 border-b border-border/30"
+                          : "pb-0 border-b border-transparent",
+                      )}
+                    >
+                      <SuggestStickyPanel open={showStickySuggest}>
+                        <div key={stickyContentKey} className="animate-suggest-enter">
+                          {priorityMatch ? (
+                            <PriorityMatchBanner
+                              match={priorityMatch}
+                              reason={priorityReason}
+                              canStart={priorityCanStart}
+                              loading={
+                                startingMatchId === priorityMatch.id ||
+                                suggestActionLoading
+                              }
+                              onStart={() => void handleStartMatch(priorityMatch.id)}
+                            />
+                          ) : null}
+                          {(showNextSuggestion && nextSuggestion) || showPairArrange ? (
+                            <NextMatchSuggest
+                              suggestion={showNextSuggestion ? nextSuggestion : null}
+                              isGameTime={isGameTime}
+                              loading={suggestActionLoading || startingMatchId != null}
+                              batchLoading={batchLoading}
+                              showBatchActions={pendingMatches.length <= 2}
+                              showPairArrange={showPairArrange}
+                              pairArrangeHint={pairArrangeHint}
+                              pairArrangeDisabled={pairArrangeDisabled}
+                              pairArrangeLoading={pairArrangeLoading}
+                              onArrangePair={() => void handleArrangePairMatch()}
+                              onStart={handleStartSuggested}
+                              onCreateAndStart={handleCreateAndStartSuggested}
+                              onQueue={handleQueueSuggested}
+                              onGenerateBatch={() => void handleGenerateBatch(10)}
+                            />
+                          ) : null}
+                        </div>
+                      </SuggestStickyPanel>
                     </div>
-                  )}
+                  ) : null}
 
                   {totalMatchCount > 0 && (
                     <div className="flex gap-1 mx-4 mb-2 p-0.5 rounded-lg bg-secondary/30">
