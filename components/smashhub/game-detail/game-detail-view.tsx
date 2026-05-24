@@ -43,6 +43,7 @@ import { PriorityMatchBanner } from "../priority-match-banner"
 import { SuggestStickyPanel } from "../suggest-sticky-panel"
 import { suggestionAnimateKey } from "@/lib/suggest-next-match"
 import { PlaceholderPlayerSheet } from "../placeholder-player-sheet"
+import { PlayerGenderSheet } from "../player-gender-sheet"
 import { ScoreEntryModal } from "../score-entry-modal"
 import { useAppTheme } from "@/lib/theme-provider"
 import { formatPriceRange } from "@/lib/format"
@@ -109,6 +110,9 @@ export function GameDetailView({ vm }: { vm: GameDetailViewModel }) {
     showPlaceholderSheet,
     setShowPlaceholderSheet,
     editingPlaceholder,
+    showGenderSheet,
+    setShowGenderSheet,
+    editingGenderPlayer,
     open,
     COURT_OPTIONS,
     matchTab,
@@ -142,6 +146,7 @@ export function GameDetailView({ vm }: { vm: GameDetailViewModel }) {
     handleKick,
     openAddPlaceholder,
     openEditPlaceholder,
+    openEditPlayerGender,
     handleDeletePlaceholder,
     openRatingSheet,
     handleRatePlayer,
@@ -533,8 +538,9 @@ export function GameDetailView({ vm }: { vm: GameDetailViewModel }) {
                       && (isHost || !isThisCoHost)
                     const canPromoteThis = isHost && !isThisHost && !isMe && !isPlaceholder
                       && (isThisCoHost || coHostCount < MAX_CO_HOSTS)
-                    const canEditPlaceholder = canManagePlaceholders && isPlaceholder
                     const gameActive = game.status !== "finished" && game.status !== "cancelled"
+                    const canEditPlaceholder = canManagePlaceholders && isPlaceholder
+                    const canEditGender = canManage && !isPlaceholder && gameActive
                     const sessionPairs = pairsFromGame(game.player_pairs)
                     const partnerId = partnerIdFor(player.id, sessionPairs)
                     const partnerName = partnerId
@@ -652,8 +658,18 @@ export function GameDetailView({ vm }: { vm: GameDetailViewModel }) {
                                 <Link2 className="w-3.5 h-3.5" />
                               </button>
                             )}
-                          {gameActive && (canPromoteThis || canKickThis || canEditPlaceholder) && (
+                          {gameActive && (canPromoteThis || canKickThis || canEditPlaceholder || canEditGender) && (
                             <div className="flex items-center gap-0.5 ml-1">
+                              {canEditGender && (
+                                <button
+                                  type="button"
+                                  onClick={() => openEditPlayerGender(player)}
+                                  className="p-1 rounded-full text-muted-foreground hover:text-primary hover:bg-primary/10 transition-colors"
+                                  title="Sửa giới tính"
+                                >
+                                  <Users className="w-3.5 h-3.5" />
+                                </button>
+                              )}
                               {canEditPlaceholder && (
                                 <>
                                   <button
@@ -1041,6 +1057,16 @@ export function GameDetailView({ vm }: { vm: GameDetailViewModel }) {
           onOpenChange={setShowPlaceholderSheet}
           gameId={game.id}
           player={editingPlaceholder}
+          onSaved={() => loadGame(game.id)}
+        />
+      )}
+
+      {game && (
+        <PlayerGenderSheet
+          open={showGenderSheet}
+          onOpenChange={setShowGenderSheet}
+          gameId={game.id}
+          player={editingGenderPlayer}
           onSaved={() => loadGame(game.id)}
         />
       )}

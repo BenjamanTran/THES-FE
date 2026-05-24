@@ -1,5 +1,5 @@
 import { request } from "./client"
-import type { AuthResponse, AuthUser, RecentActivityResponse, UpdateProfileParams } from "./types"
+import type { AuthResponse, AuthUser, Gender, RecentActivityResponse, UpdateProfileParams } from "./types"
 
 export function mergeAuthUser(res: AuthResponse): AuthUser {
   return { ...res.user, stats: res.stats, profile: res.profile }
@@ -10,6 +10,7 @@ export function signup(params: {
   name: string
   password: string
   password_confirmation: string
+  gender?: Gender
 }) {
   return request<AuthResponse>("/api/v1/signup", {
     method: "POST",

@@ -101,7 +101,10 @@ function LoginForm() {
         <div className="mt-4 flex flex-col items-center gap-1.5">
           <p className="text-xs text-center text-muted-foreground">
             Chưa có tài khoản?{" "}
-            <Link href="/signup" className="text-primary font-medium hover:underline">
+            <Link
+              href={next === "/" ? "/signup" : `/signup?next=${encodeURIComponent(next)}`}
+              className="text-primary font-medium hover:underline"
+            >
               Đăng ký
             </Link>
           </p>

@@ -1,17 +1,34 @@
 "use client";
 
-import { useState } from "react";
+import { Suspense, useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useAuth } from "@/lib/auth-context";
+import type { Gender } from "@/lib/api";
+import { cn } from "@/lib/utils";
+
+const GENDER_OPTIONS: Array<{ value: Gender; label: string }> = [
+  { value: "male", label: "Nam" },
+  { value: "female", label: "Nữ" },
+];
 
 export default function SignupPage() {
+  return (
+    <Suspense>
+      <SignupForm />
+    </Suspense>
+  );
+}
+
+function SignupForm() {
   const router = useRouter();
+  const search = useSearchParams();
+  const next = search.get("next") || "/";
   const { signup } = useAuth();
   const [form, setForm] = useState({
     name: "",
@@ -19,6 +36,7 @@ export default function SignupPage() {
     password: "",
     password_confirmation: "",
   });
+  const [gender, setGender] = useState<Gender>("male");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -39,8 +57,9 @@ export default function SignupPage() {
         email: form.email.trim(),
         password: form.password,
         password_confirmation: form.password_confirmation,
+        gender,
       });
-      router.replace("/");
+      router.replace(next);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Đăng ký thất bại");
     } finally {
@@ -92,6 +111,27 @@ export default function SignupPage() {
           </div>
 
           <div className="space-y-1.5">
+            <Label className="text-xs">Giới tính</Label>
+            <div className="grid grid-cols-2 gap-2">
+              {GENDER_OPTIONS.map((opt) => (
+                <button
+                  key={opt.value}
+                  type="button"
+                  onClick={() => setGender(opt.value)}
+                  className={cn(
+                    "py-2.5 rounded-xl text-xs font-medium border transition-colors",
+                    gender === opt.value
+                      ? "bg-primary text-primary-foreground border-primary"
+                      : "bg-secondary/50 text-foreground border-border hover:bg-secondary",
+                  )}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="space-y-1.5">
             <Label htmlFor="password" className="text-xs">
               Mật khẩu
             </Label>
@@ -138,14 +178,17 @@ export default function SignupPage() {
 
         <p className="text-xs text-center text-muted-foreground mt-6">
           Đã có tài khoản?{" "}
-          <Link href="/login" className="text-primary font-medium hover:underline">
+          <Link
+            href={next === "/" ? "/login" : `/login?next=${encodeURIComponent(next)}`}
+            className="text-primary font-medium hover:underline"
+          >
             Đăng nhập
           </Link>
         </p>
 
         <button
           type="button"
-          onClick={() => router.push("/")}
+          onClick={() => router.push(next)}
           className="block w-full text-center text-xs font-medium text-muted-foreground hover:text-foreground mt-3 py-2.5 rounded-full bg-muted/50 hover:bg-muted/70 border border-border/40 transition-colors"
         >
           Để sau, tiếp tục xem ứng dụng

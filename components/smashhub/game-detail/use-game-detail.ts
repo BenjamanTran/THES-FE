@@ -93,6 +93,8 @@ export function useGameDetail(gameId: number | null, onClose: () => void) {
   const [settingsError, setSettingsError] = useState<string | null>(null)
   const [showPlaceholderSheet, setShowPlaceholderSheet] = useState(false)
   const [editingPlaceholder, setEditingPlaceholder] = useState<GamePlayer | null>(null)
+  const [showGenderSheet, setShowGenderSheet] = useState(false)
+  const [editingGenderPlayer, setEditingGenderPlayer] = useState<GamePlayer | null>(null)
   const open = gameId !== null
 
   function mergePriorityIntoMatches(data: GameDetail): GameDetail {
@@ -711,6 +713,11 @@ export function useGameDetail(gameId: number | null, onClose: () => void) {
     setShowPlaceholderSheet(true)
   }
 
+  const openEditPlayerGender = (player: GamePlayer) => {
+    setEditingGenderPlayer(player)
+    setShowGenderSheet(true)
+  }
+
   const handleDeletePlaceholder = async (userId: number, name: string | null) => {
     if (!game) return
     if (!window.confirm(`Xóa ${name || "người tạm"} khỏi danh sách?`)) return
@@ -1146,6 +1153,9 @@ export function useGameDetail(gameId: number | null, onClose: () => void) {
     showPlaceholderSheet,
     setShowPlaceholderSheet,
     editingPlaceholder,
+    showGenderSheet,
+    setShowGenderSheet,
+    editingGenderPlayer,
     open,
     COURT_OPTIONS,
     matchTab,
@@ -1184,6 +1194,7 @@ export function useGameDetail(gameId: number | null, onClose: () => void) {
     handleKick,
     openAddPlaceholder,
     openEditPlaceholder,
+    openEditPlayerGender,
     handleDeletePlaceholder,
     openRatingSheet,
     handleRatePlayer,

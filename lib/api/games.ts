@@ -4,6 +4,7 @@ import type {
   Game,
   GameDetail,
   GamePlayer,
+  Gender,
   JoinResponse,
   PlaceholderPlayerParams,
   Tier,
@@ -111,6 +112,16 @@ export function ratePlayer(
   params: { user_id: number; tier: Tier; stars: number; note?: string },
 ) {
   return request<GamePlayer>(`/api/v1/games/${gameId}/rate_player`, {
+    method: "PATCH",
+    body: JSON.stringify(params),
+  })
+}
+
+export function updatePlayerGender(
+  gameId: number,
+  params: { user_id: number; gender: Gender },
+) {
+  return request<GamePlayer>(`/api/v1/games/${gameId}/update_player`, {
     method: "PATCH",
     body: JSON.stringify(params),
   })

@@ -33,6 +33,7 @@ interface AuthContextValue {
     name: string;
     password: string;
     password_confirmation: string;
+    gender?: import("@/lib/api").Gender;
   }) => Promise<AuthUser>;
   logout: () => Promise<void>;
   refresh: () => Promise<void>;
@@ -77,6 +78,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       name: string;
       password: string;
       password_confirmation: string;
+      gender?: import("@/lib/api").Gender;
     }) => {
       const res = await apiSignup(params);
       const user = mergeAuthUser(res);
