@@ -173,7 +173,6 @@ export function GameDetailSimpleView({ vm }: { vm: GameDetailSimpleViewModel }) 
                         <span>
                           Host:{" "}
                           <span className="text-foreground font-medium">{game.host.name}</span>
-                          {isHost && " (bạn)"}
                         </span>
                       </div>
                     )}
@@ -254,7 +253,7 @@ export function GameDetailSimpleView({ vm }: { vm: GameDetailSimpleViewModel }) 
                 </div>
 
                 <p className="text-[10px] text-muted-foreground mb-3">
-                  Sắp xếp theo số trận ít nhất — người được ưu tiên lên sân tiếp theo.
+                  Sắp xếp nữ → nam, trong mỗi nhóm theo tên. Viền xanh = ít trận nhất (ưu tiên lên sân).
                 </p>
 
                 <div className="space-y-2">
@@ -304,12 +303,6 @@ export function GameDetailSimpleView({ vm }: { vm: GameDetailSimpleViewModel }) 
                           <div className="flex items-center gap-2 flex-wrap">
                             <p className="text-sm font-semibold truncate">
                               {player.name || `User #${player.id}`}
-                              {isMe && (
-                                <span className="text-xs text-muted-foreground font-normal">
-                                  {" "}
-                                  (bạn)
-                                </span>
-                              )}
                             </p>
                             {isThisHost && (
                               <Badge className="bg-amber-500/20 text-amber-400 border-0 text-[10px] px-1.5">

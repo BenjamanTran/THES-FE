@@ -15,7 +15,11 @@ import {
   type Tier,
 } from "@/lib/api"
 import { ratingToStars } from "@/lib/rating-stars"
-import { countPlayersByGender, formatPlayerGenderLabel } from "@/lib/player-gender-counts"
+import {
+  countPlayersByGender,
+  formatPlayerGenderLabel,
+  sortPlayersByGenderThenName,
+} from "@/lib/player-gender-counts"
 import { useAuth, useRequireAuth } from "@/lib/auth-context"
 import { reverseGeocode } from "@/lib/geocode"
 import { useGameCable } from "@/hooks/use-game-cable"
@@ -122,10 +126,10 @@ export function useGameDetailSimple(gameId: number | null, onClose: () => void) 
   }, [game])
   const gameActive = game != null && game.status !== "finished" && game.status !== "cancelled"
 
-  const sortedPlayers = useMemo(() => {
-    if (!game?.players) return []
-    return [...game.players].sort((a, b) => playedCount(a) - playedCount(b))
-  }, [game?.players])
+  const sortedPlayers = useMemo(
+    () => sortPlayersByGenderThenName(game?.players ?? []),
+    [game?.players],
+  )
 
   const minPlayed = useMemo(() => {
     if (sortedPlayers.length === 0) return 0

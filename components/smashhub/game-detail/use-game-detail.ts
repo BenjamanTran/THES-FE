@@ -74,7 +74,11 @@ import {
   playersArrivedAtCourt,
 } from "@/lib/match-players"
 import { ratingToStars } from "@/lib/rating-stars"
-import { countPlayersByGender, formatPlayerGenderLabel } from "@/lib/player-gender-counts"
+import {
+  countPlayersByGender,
+  formatPlayerGenderLabel,
+  sortPlayersByGenderThenName,
+} from "@/lib/player-gender-counts"
 import { fitMeta } from "./meta"
 import { COURT_OPTIONS, MAX_CO_HOSTS, UNDO_MS } from "@/components/smashhub/game-detail/constants"
 import { useGamePlayerPairTap } from "@/components/smashhub/game-detail/game-player-pairs"
@@ -963,15 +967,10 @@ export function useGameDetail(gameId: number | null, onClose: () => void) {
   )
   const maxPlayed = useMemo(() => maxSessionPlayed(playerMatchCounts), [playerMatchCounts])
 
-  const sortedPlayers = useMemo(() => {
-    if (!game?.players) return []
-    return [...game.players].sort((a, b) => {
-      const ca = playerMatchCounts[a.id]?.played ?? 0
-      const cb = playerMatchCounts[b.id]?.played ?? 0
-      if (ca !== cb) return cb - ca
-      return (a.name || "").localeCompare(b.name || "", "vi")
-    })
-  }, [game?.players, playerMatchCounts])
+  const sortedPlayers = useMemo(
+    () => sortPlayersByGenderThenName(game?.players ?? []),
+    [game?.players],
+  )
 
   const { ongoingMatches, pendingMatches, finishedMatches } = useMemo(() => {
     const all = game?.matches ?? []

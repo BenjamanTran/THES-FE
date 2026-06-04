@@ -289,7 +289,6 @@ export function GameDetailView({ vm }: { vm: GameDetailViewModel }) {
                         <Crown className="w-3.5 h-3.5 text-amber-400" />
                         <span>
                           Host: <span className="text-foreground font-medium">{game.host.name}</span>
-                          {isHost && " (bạn)"}
                         </span>
                       </div>
                     )}
@@ -617,7 +616,6 @@ export function GameDetailView({ vm }: { vm: GameDetailViewModel }) {
                         <div className="flex-1 min-w-0">
                           <p className="text-sm font-medium truncate">
                             {player.name || `User #${player.id}`}
-                            {isMe && <span className="text-xs text-muted-foreground"> (bạn)</span>}
                             {partnerName && (
                               <span className="text-[10px] text-primary font-normal ml-1">
                                 <Link2 className="inline w-3 h-3 mr-0.5" />

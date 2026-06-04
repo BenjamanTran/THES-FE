@@ -1,4 +1,21 @@
-import type { GamePlayer } from "@/lib/api"
+import type { GamePlayer, Gender } from "@/lib/api"
+
+/** Female first, then male, then unspecified/other. */
+export function genderSortOrder(gender?: Gender): number {
+  if (gender === "female") return 0
+  if (gender === "male") return 1
+  return 2
+}
+
+export function sortPlayersByGenderThenName<T extends Pick<GamePlayer, "gender" | "name">>(
+  players: T[],
+): T[] {
+  return [...players].sort((a, b) => {
+    const byGender = genderSortOrder(a.gender) - genderSortOrder(b.gender)
+    if (byGender !== 0) return byGender
+    return (a.name || "").localeCompare(b.name || "", "vi", { sensitivity: "base" })
+  })
+}
 
 export function countPlayersByGender(players: Pick<GamePlayer, "gender">[]) {
   let male = 0
