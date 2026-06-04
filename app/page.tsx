@@ -1,7 +1,7 @@
 "use client"
 
-import { Suspense, useState, useRef, useEffect } from "react"
-import { useSearchParams } from "next/navigation"
+import { Suspense, useState, useRef, useEffect, useCallback } from "react"
+import { useRouter, useSearchParams } from "next/navigation"
 import { BottomNav, type AppTab } from "@/components/smashhub/bottom-nav"
 import { DesktopSidebar } from "@/components/smashhub/desktop-sidebar"
 import { DesktopDemoPanel } from "@/components/smashhub/desktop-demo-panel"
@@ -14,6 +14,8 @@ import { CreateMatchModal } from "@/components/smashhub/create-match-modal"
 import type { Venue } from "@/lib/api"
 import { GameDetailScreen } from "@/components/smashhub/game-detail-screen"
 import { useAuth, useRequireAuth } from "@/lib/auth-context"
+import { dismissManageGame, useAutoOpenManageGame } from "@/hooks/use-auto-open-manage-game"
+import { gameDetailPath } from "@/lib/game-paths"
 import { cn } from "@/lib/utils"
 
 function HomeLoading() {
@@ -35,7 +37,8 @@ export default function Page() {
 }
 
 function SmashHubPro() {
-  const { loading } = useAuth()
+  const router = useRouter()
+  const { user, loading, refresh } = useAuth()
   const requireAuth = useRequireAuth()
   const searchParams = useSearchParams()
   const [activeTab, setActiveTab] = useState<AppTab>("home")
@@ -67,10 +70,21 @@ function SmashHubPro() {
     }
   }, [activeTab])
 
-  const openGameDetail = (id: number) => setSelectedGameId(id)
+  const openGameDetail = useCallback(
+    (id: number) => {
+      setSelectedGameId(id)
+      router.replace(gameDetailPath(id), { scroll: false })
+    },
+    [router],
+  )
+  useAutoOpenManageGame(user, loading, openGameDetail)
+
   const closeGameDetail = () => {
+    if (selectedGameId != null) dismissManageGame(selectedGameId)
     setSelectedGameId(null)
+    router.replace("/", { scroll: false })
     setRefreshKey((k) => k + 1)
+    void refresh()
   }
   const handleGameListRefresh = () => setRefreshKey((k) => k + 1)
 

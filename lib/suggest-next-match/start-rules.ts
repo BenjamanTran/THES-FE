@@ -25,13 +25,26 @@ export function getOngoingBusyIds(matches: MatchSummary[]): Set<number> {
   )
 }
 
+export function activeGamePlayerIds(game: Pick<GameDetail, "players">): Set<number> {
+  return new Set((game.players ?? []).map((p) => p.id))
+}
+
+export function rosterPlayersGone(
+  match: MatchSummary,
+  activePlayerIds: Set<number>,
+): MatchSummary["team_a"] {
+  return [...match.team_a, ...match.team_b].filter((p) => !activePlayerIds.has(p.id))
+}
+
 export function isMatchStartable(
   match: MatchSummary,
   busyIds: Set<number>,
+  activePlayerIds: Set<number>,
   playersNeeded = 4,
 ) {
   const roster = [...match.team_a, ...match.team_b]
   if (roster.length < playersNeeded) return false
+  if (!roster.every((p) => activePlayerIds.has(p.id))) return false
   return roster.every((p) => !busyIds.has(p.id))
 }
 
@@ -40,6 +53,7 @@ export function getPendingStartBlockReason(
   game: GameDetail,
   matches: MatchSummary[],
   busyIds: Set<number>,
+  activePlayerIds: Set<number>,
   playersNeeded: number,
 ): string | null {
   const maxCourts = getMaxCourts(game)
@@ -47,7 +61,12 @@ export function getPendingStartBlockReason(
   if (!canStartAnotherMatch(matches, maxCourts)) {
     return `Sân đầy (${ongoing.length}/${maxCourts}) — kết thúc trận trên sân trước`
   }
-  if (!isMatchStartable(match, busyIds, playersNeeded)) {
+  const gone = rosterPlayersGone(match, activePlayerIds)
+  if (gone.length > 0) {
+    const who = [...new Set(gone.map((p) => playerDisplayName(p.name, p.id)))].join(", ")
+    return `${who} đã rời buổi — sửa hoặc xóa trận chờ`
+  }
+  if (!isMatchStartable(match, busyIds, activePlayerIds, playersNeeded)) {
     const blockers = getMatchStartBlockers(match, ongoing)
     if (blockers.length > 0) {
       const who = [...new Set(blockers.map((b) => b.playerName))].join(", ")
@@ -87,9 +106,23 @@ export function getMatchStartBlockers(
 export function filterStartablePending(
   pending: MatchSummary[],
   busyIds: Set<number>,
+  activePlayerIds: Set<number>,
   playersNeeded: number,
 ) {
-  return pending.filter((m) => isMatchStartable(m, busyIds, playersNeeded))
+  return pending.filter((m) => isMatchStartable(m, busyIds, activePlayerIds, playersNeeded))
+}
+
+/** Next pending to put on court: ★ ready first, else FIFO ready, else earliest queued. */
+export function pickNextPendingForQueue(
+  pending: MatchSummary[],
+  startablePending: MatchSummary[],
+): MatchSummary {
+  const startableIds = new Set(startablePending.map((m) => m.id))
+  const priorityReady = pending.find((m) => m.priority && startableIds.has(m.id))
+  if (priorityReady) return priorityReady
+  const fifoReady = pending.find((m) => startableIds.has(m.id))
+  if (fifoReady) return fifoReady
+  return pending[0]!
 }
 
 /** Pending match that frees up soonest (fewest players still on court). */

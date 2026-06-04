@@ -1,20 +1,18 @@
 import type { GameDetail, GamePlayer, MatchSummary } from "@/lib/api"
+import { canAddPendingMatch } from "@/lib/match-queue-capacity"
+import { sortPendingQueue } from "@/lib/match-queue-order"
 import { balanceTeams } from "@/lib/balance"
-import { compositeFairnessCounts, sessionPlayedSpread } from "@/lib/match-stats"
 import { playerDisplayName } from "@/lib/player-display-name"
 import { formatMatchLabel, formatTeamsLabel } from "./labels"
-import { pickFairestPending, pickFairestPendingToStart } from "./lineup-fairness"
 import { rotationFairnessCounts } from "@/lib/match-stats"
+import { suggestPipelineQueueLineup } from "./pipeline-queue"
 import {
   filterStartablePending,
   getMatchStartBlockers,
   getOngoingBusyIds,
-  pickNearestPending,
+  pickNextPendingForQueue,
 } from "./start-rules"
-import type { NextMatchSuggestion } from "./types"
-
-/** Prefer "Tạo & bắt đầu" over hàng chờ when min/max played in player list differs by at least this much. */
-const CREATE_OVER_QUEUE_MIN_SPREAD = 1
+import type { NextMatchSuggestion, SuggestQueueAction } from "./types"
 
 function idealLineup(
   players: GamePlayer[],
@@ -56,6 +54,42 @@ function fairnessReasonForMatch(
   )
 }
 
+/** Optional secondary queue action when a pending slot is still available. */
+function altQueueForPipeline(
+  game: GameDetail,
+  players: GamePlayer[],
+  matches: MatchSummary[],
+): SuggestQueueAction | undefined {
+  if (!canAddPendingMatch(game, matches)) return undefined
+  const pipeline = suggestPipelineQueueLineup(game, players, matches)
+  if (!pipeline) return undefined
+  return {
+    teamA: pipeline.teamA,
+    teamB: pipeline.teamB,
+    label: pipeline.label,
+    reason: pipeline.reason,
+  }
+}
+
+export function getQueueLineupFromSuggestion(
+  suggestion: NextMatchSuggestion | null | undefined,
+): { teamA: number[]; teamB: number[] } | null {
+  if (!suggestion) return null
+  if (suggestion.kind === "queue") {
+    return { teamA: suggestion.teamA, teamB: suggestion.teamB }
+  }
+  if (
+    (suggestion.kind === "start" || suggestion.kind === "create") &&
+    suggestion.altQueue
+  ) {
+    return {
+      teamA: suggestion.altQueue.teamA,
+      teamB: suggestion.altQueue.teamB,
+    }
+  }
+  return null
+}
+
 export function suggestNextMatch(
   game: GameDetail,
   players: GamePlayer[],
@@ -65,117 +99,117 @@ export function suggestNextMatch(
   const needed = teamSize * 2
   if (players.length < needed) return null
 
-  const fairness = compositeFairnessCounts(players, matches)
   const startFairness = rotationFairnessCounts(players, matches)
-  const allPlayerIds = players.map((p) => p.id)
   const ongoing = matches.filter((m) => m.status === "ongoing")
-  const pending = matches
-    .filter((m) => m.status === "pending")
-    .sort((a, b) => a.match_number - b.match_number)
+  const pending = sortPendingQueue(matches.filter((m) => m.status === "pending"))
 
   const maxCourts = Math.max(1, game.courts?.length ?? 1)
   const canStartMore = ongoing.length < maxCourts
   const busyIds = getOngoingBusyIds(matches)
   const freePlayers = players.filter((p) => !busyIds.has(p.id))
+  const queueHasRoom = canAddPendingMatch(game, matches)
+  const pipelineQueue = queueHasRoom
+    ? suggestPipelineQueueLineup(game, players, matches)
+    : null
   const idealCreate =
-    freePlayers.length >= needed ? idealLineup(freePlayers, teamSize, startFairness) : null
-  const idealQueue =
-    freePlayers.length >= needed ? idealLineup(freePlayers, teamSize, fairness) : null
-  const startablePending = filterStartablePending(pending, busyIds, needed)
-  const playedSpread = sessionPlayedSpread(players, matches)
-  const preferCreateOverQueue = playedSpread >= CREATE_OVER_QUEUE_MIN_SPREAD
+    freePlayers.length >= needed
+      ? idealLineup(freePlayers, teamSize, startFairness)
+      : null
+  const activePlayerIds = new Set(players.map((p) => p.id))
+  const startablePending = filterStartablePending(
+    pending,
+    busyIds,
+    activePlayerIds,
+    needed,
+  )
 
   if (pending.length > 0) {
-    const priorityStartable = startablePending.filter((m) => m.priority)
-
-    if (canStartMore && priorityStartable.length > 0) {
-      const match = pickFairestPendingToStart(priorityStartable, players, matches)
-      return {
-        kind: "start",
-        match,
-        label: formatMatchLabel(match),
-        reason: fairnessReasonForMatch(match, players, startFairness),
-      }
-    }
-
-    if (canStartMore && startablePending.length > 0) {
-      const match = pickFairestPendingToStart(startablePending, players, matches)
-      const matchReason = fairnessReasonForMatch(match, players, startFairness)
-      const startSuggestion: Extract<NextMatchSuggestion, { kind: "start" }> = {
-        kind: "start",
-        match,
-        label: formatMatchLabel(match),
-        reason:
-          playedSpread < CREATE_OVER_QUEUE_MIN_SPREAD
-            ? `Lệch ${playedSpread} trận (dưới ${CREATE_OVER_QUEUE_MIN_SPREAD}) — bắt đầu từ hàng chờ. ${matchReason}`
-            : `Có ${startablePending.length} trận chờ sẵn sàng. ${matchReason}`,
-      }
-      if (preferCreateOverQueue && idealCreate) {
-        const { teamA, teamB } = idealCreate
-        const fairReason = fairnessReason(teamA, teamB, players, startFairness)
-        startSuggestion.altCreate = {
-          teamA,
-          teamB,
-          label: formatTeamsLabel(teamA, teamB, players),
-          reason: `Lệch ${playedSpread} trận — ghép ${needed} người rảnh theo lượt đã đấu. ${fairReason}`,
-        }
-      }
-      return startSuggestion
-    }
-
-    if (canStartMore && idealCreate && preferCreateOverQueue) {
-      const { teamA, teamB } = idealCreate
-      const fairReason = fairnessReason(teamA, teamB, players, startFairness)
-      return {
-        kind: "create",
-        teamA,
-        teamB,
-        label: formatTeamsLabel(teamA, teamB, players),
-        reason: `Lệch ${playedSpread} trận — ghép ${needed} người rảnh theo lượt đã đấu. ${fairReason}`,
-      }
-    }
-
-    const next = pickNearestPending(
-      pending,
-      busyIds,
-      startFairness,
-      allPlayerIds,
-      pickFairestPending,
-    )
-    const blockers = getMatchStartBlockers(next, ongoing)
-    const freeCourts = Math.max(0, maxCourts - ongoing.length)
+    const nextOnCourt = pickNextPendingForQueue(pending, startablePending)
+    const queueOrder = pending
+      .map((m) => (m.priority ? `★#${m.match_number}` : `#${m.match_number}`))
+      .join(" → ")
 
     if (!canStartMore) {
+      if (pipelineQueue) {
+        return {
+          kind: "queue",
+          teamA: pipelineQueue.teamA,
+          teamB: pipelineQueue.teamB,
+          label: pipelineQueue.label,
+          reason: `${pipelineQueue.reason}. Sân đầy (${ongoing.length}/${maxCourts}) — tiếp theo: Trận #${nextOnCourt.match_number}.`,
+        }
+      }
+      const capNote = queueHasRoom
+        ? ""
+        : ` Hàng chờ đầy (${pending.length}/${maxCourts}).`
       return {
         kind: "wait_court",
-        match: next,
-        label: formatMatchLabel(next),
-        reason: `Sân đầy (${ongoing.length}/${maxCourts}) — kết thúc trận trên sân rồi bắt đầu Trận ${next.match_number}`,
+        match: nextOnCourt,
+        label: formatMatchLabel(nextOnCourt),
+        reason: `Sân đầy (${ongoing.length}/${maxCourts}) — kết thúc trận trên sân, bắt đầu Trận #${nextOnCourt.match_number} (${queueOrder}).${capNote}`,
       }
     }
 
-    const queueSummary = `${startablePending.length}/${pending.length} trận chờ bắt đầu được ngay`
-    const nextDetail =
+    if (startablePending.length > 0) {
+      const match = pickNextPendingForQueue(pending, startablePending)
+      const matchReason = fairnessReasonForMatch(match, players, startFairness)
+      const readyOrder = sortPendingQueue(startablePending)
+        .map((m) => (m.priority ? `★#${m.match_number}` : `#${m.match_number}`))
+        .join(" → ")
+      return {
+        kind: "start",
+        match,
+        label: formatMatchLabel(match),
+        reason: `Bắt đầu từ hàng chờ: ${readyOrder}. ${matchReason}`,
+      }
+    }
+
+    const blockers = getMatchStartBlockers(nextOnCourt, ongoing)
+    const freeCourts = Math.max(0, maxCourts - ongoing.length)
+    const waitDetail =
       blockers.length > 0
-        ? `Trận #${next.match_number} lên sớm nhất khi ${blockers.map((b) => b.playerName).join(", ")} xong (đang #${blockers[0]!.ongoingMatchNumber})`
-        : `Trận #${next.match_number} sắp sẵn sàng`
+        ? `Trận #${nextOnCourt.match_number} chờ ${blockers.map((b) => b.playerName).join(", ")} xong (đang #${blockers[0]!.ongoingMatchNumber})`
+        : `Trận #${nextOnCourt.match_number} chưa đủ người rảnh`
+    if (pipelineQueue && queueHasRoom) {
+      return {
+        kind: "queue",
+        teamA: pipelineQueue.teamA,
+        teamB: pipelineQueue.teamB,
+        label: pipelineQueue.label,
+        reason: `${pipelineQueue.reason}. ${pending.length} trận chờ (${queueOrder}) — ${waitDetail}.`,
+      }
+    }
     return {
       kind: "wait_players",
-      match: next,
-      label: formatMatchLabel(next),
-      reason: `${queueSummary}. ${nextDetail} — còn ${freeCourts} sân trống (${ongoing.length}/${maxCourts}).`,
+      match: nextOnCourt,
+      label: formatMatchLabel(nextOnCourt),
+      reason: `${pending.length} trận chờ (${queueOrder}). ${waitDetail} — còn ${freeCourts} sân (${ongoing.length}/${maxCourts}).`,
     }
   }
 
-  if (!idealCreate && !idealQueue) {
+  if (!idealCreate && !pipelineQueue) return null
+
+  if (!canStartMore) {
+    if (pipelineQueue) {
+      return {
+        kind: "queue",
+        teamA: pipelineQueue.teamA,
+        teamB: pipelineQueue.teamB,
+        label: pipelineQueue.label,
+        reason: `${pipelineQueue.reason}. Sân đầy (${ongoing.length}/${maxCourts}) — thêm vào hàng chờ.`,
+      }
+    }
+    const fullNote = queueHasRoom
+      ? ""
+      : ` Hàng chờ đầy (${pending.length}/${maxCourts}).`
     return {
-      kind: "batch",
-      label: "Xếp sẵn 10 trận vào hàng chờ",
-      reason: "Không ghép được đội — thử xếp hàng loạt hoặc thêm người",
+      kind: "wait_court",
+      label: "Chờ sân trống",
+      reason: `Sân đầy (${ongoing.length}/${maxCourts}) — kết thúc trận trên sân trước.${fullNote}`,
     }
   }
 
-  if (canStartMore && idealCreate) {
+  if (idealCreate) {
     const { teamA, teamB } = idealCreate
     return {
       kind: "create",
@@ -183,33 +217,29 @@ export function suggestNextMatch(
       teamB,
       label: formatTeamsLabel(teamA, teamB, players),
       reason: fairnessReason(teamA, teamB, players, startFairness),
+      altQueue: altQueueForPipeline(game, players, matches),
     }
   }
 
-  if (!idealQueue) {
+  if (pipelineQueue && canStartMore && !idealCreate) {
     return {
-      kind: "batch",
-      label: "Xếp sẵn 10 trận vào hàng chờ",
-      reason: "Không ghép được đội — thử xếp hàng loạt hoặc thêm người",
+      kind: "queue",
+      teamA: pipelineQueue.teamA,
+      teamB: pipelineQueue.teamB,
+      label: pipelineQueue.label,
+      reason: `${pipelineQueue.reason} — thêm hàng chờ (chưa đủ người rảnh để bắt đầu ngay).`,
     }
   }
 
-  const { teamA, teamB } = idealQueue
-  const label = formatTeamsLabel(teamA, teamB, players)
-  const reason = fairnessReason(teamA, teamB, players, fairness)
-
-  const benchCount = freePlayers.length
-  const onCourtInLineup = [...teamA, ...teamB].filter((id) => busyIds.has(id)).length
-  return {
-    kind: "queue",
-    teamA,
-    teamB,
-    label,
-    reason:
-      !canStartMore
-        ? `Sân đang bận — thêm vào hàng chờ${onCourtInLineup > 0 ? ` (${onCourtInLineup} người đang đấu sẽ luân sau)` : ""}`
-        : benchCount < needed
-          ? `Chỉ ${benchCount} người rảnh (cần ${needed}) — ${reason}`
-          : reason,
+  if (pipelineQueue) {
+    return {
+      kind: "queue",
+      teamA: pipelineQueue.teamA,
+      teamB: pipelineQueue.teamB,
+      label: pipelineQueue.label,
+      reason: pipelineQueue.reason,
+    }
   }
+
+  return null
 }

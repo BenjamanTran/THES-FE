@@ -16,9 +16,7 @@ import {
   type InviteLiveState,
 } from "@/lib/invite-live-cable";
 
-function gameDetailPath(gameId: number) {
-  return `/?game=${gameId}`;
-}
+import { gameDetailPath } from "@/lib/game-paths";
 
 export default function JoinPage({ params }: { params: Promise<{ code: string }> }) {
   const { code } = use(params);
@@ -96,29 +94,6 @@ export default function JoinPage({ params }: { params: Promise<{ code: string }>
     if (isClosedMode) disconnectGameCable();
   }, [isClosedMode]);
 
-  useEffect(() => {
-    if (loading || !useRealtime) return;
-    const id = window.setInterval(refreshInviteLive, 8000);
-    const onVisible = () => {
-      if (document.visibilityState === "visible") refreshInviteLive();
-    };
-    document.addEventListener("visibilitychange", onVisible);
-    return () => {
-      window.clearInterval(id);
-      document.removeEventListener("visibilitychange", onVisible);
-    };
-  }, [useRealtime, loading, refreshInviteLive]);
-
-  useEffect(() => {
-    if (loading || !isClosedMode) return;
-    refreshInviteLive();
-    const onVisible = () => {
-      if (document.visibilityState === "visible") refreshInviteLive();
-    };
-    document.addEventListener("visibilitychange", onVisible);
-    return () => document.removeEventListener("visibilitychange", onVisible);
-  }, [isClosedMode, loading, refreshInviteLive]);
-
   const handleInviteCableEvent = useCallback(
     (payload: GameCableEvent) => {
       setInviteLive((prev) =>
@@ -130,12 +105,36 @@ export default function JoinPage({ params }: { params: Promise<{ code: string }>
     [],
   );
 
-  useGameCable(
+  const inviteCableConnected = useGameCable(
     useRealtime ? (gameInfo?.id ?? null) : null,
     handleInviteCableEvent,
     useRealtime,
     { inviteCode: code },
   );
+
+  useEffect(() => {
+    if (loading || !useRealtime) return;
+    const pollMs = inviteCableConnected ? 45_000 : 5_000;
+    const id = window.setInterval(refreshInviteLive, pollMs);
+    const onVisible = () => {
+      if (document.visibilityState === "visible") refreshInviteLive();
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      window.clearInterval(id);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
+  }, [useRealtime, loading, refreshInviteLive, inviteCableConnected]);
+
+  useEffect(() => {
+    if (loading || !isClosedMode) return;
+    refreshInviteLive();
+    const onVisible = () => {
+      if (document.visibilityState === "visible") refreshInviteLive();
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => document.removeEventListener("visibilitychange", onVisible);
+  }, [isClosedMode, loading, refreshInviteLive]);
 
   if (loading || authLoading || gameInfo?.mode === "join") {
     return (

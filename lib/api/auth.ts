@@ -1,8 +1,26 @@
 import { request } from "./client"
 import type { AuthResponse, AuthUser, Gender, RecentActivityResponse, UpdateProfileParams } from "./types"
 
+export type { ExperimentsPayload, GameDetailScreenVariant } from "./types"
+
+let cachedExperiments: AuthResponse["experiments"] | undefined
+
 export function mergeAuthUser(res: AuthResponse): AuthUser {
-  return { ...res.user, stats: res.stats, profile: res.profile }
+  if (res.experiments) cachedExperiments = res.experiments
+  return {
+    ...res.user,
+    stats: res.stats,
+    profile: res.profile,
+    active_manage_game: res.active_manage_game ?? res.user.active_manage_game ?? null,
+  }
+}
+
+export function getCachedExperiments() {
+  return cachedExperiments
+}
+
+export function setCachedExperiments(experiments: AuthResponse["experiments"]) {
+  cachedExperiments = experiments
 }
 
 export function signup(params: {

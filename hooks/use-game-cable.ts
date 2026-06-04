@@ -1,9 +1,8 @@
 "use client"
 
-import { useEffect, useRef } from "react"
+import { useEffect, useRef, useState } from "react"
 import type { Subscription } from "@rails/actioncable"
 import {
-  disconnectGameCable,
   subscribeToGame,
   type GameCableEvent,
   type GameCableSubscribeOptions,
@@ -14,7 +13,8 @@ export function useGameCable(
   onEvent: (payload: GameCableEvent) => void,
   enabled = true,
   options?: GameCableSubscribeOptions,
-) {
+): boolean {
+  const [connected, setConnected] = useState(false)
   const handlerRef = useRef(onEvent)
   handlerRef.current = onEvent
 
@@ -24,10 +24,16 @@ export function useGameCable(
   const onDisconnectedRef = useRef(options?.onDisconnected)
   onDisconnectedRef.current = options?.onDisconnected
 
+  const onRejectedRef = useRef(options?.onRejected)
+  onRejectedRef.current = options?.onRejected
+
   const inviteCode = options?.inviteCode
 
   useEffect(() => {
-    if (!enabled || gameId == null) return
+    if (!enabled || gameId == null) {
+      setConnected(false)
+      return
+    }
 
     let sub: Subscription | null = null
     try {
@@ -36,21 +42,30 @@ export function useGameCable(
         (payload) => handlerRef.current(payload),
         {
           inviteCode,
-          onConnected: () => onConnectedRef.current?.(),
-          onDisconnected: () => onDisconnectedRef.current?.(),
+          onConnected: () => {
+            setConnected(true)
+            onConnectedRef.current?.()
+          },
+          onDisconnected: () => {
+            setConnected(false)
+            onDisconnectedRef.current?.()
+          },
+          onRejected: () => {
+            setConnected(false)
+            onRejectedRef.current?.()
+          },
         },
       )
     } catch {
+      setConnected(false)
       onDisconnectedRef.current?.()
     }
 
     return () => {
       sub?.unsubscribe()
+      setConnected(false)
     }
   }, [gameId, enabled, inviteCode])
 
-  useEffect(() => {
-    if (enabled) return
-    disconnectGameCable()
-  }, [enabled])
+  return connected
 }

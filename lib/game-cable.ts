@@ -1,7 +1,7 @@
 "use client"
 
 import { createConsumer, type Consumer, type Subscription } from "@rails/actioncable"
-import type { MatchSummary } from "@/lib/api"
+import type { GamePlayer, MatchSummary } from "@/lib/api"
 
 const API_URL = (process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000").replace(/\/$/, "")
 
@@ -12,6 +12,8 @@ export type GameCableEvent =
   | { event: "match.finished"; match: MatchSummary }
   | { event: "match.undo"; match: MatchSummary }
   | { event: "match.deleted"; match_id: number }
+  | { event: "player.session_played"; player: GamePlayer }
+  | { event: "game.refresh" }
 
 let sharedConsumer: Consumer | null = null
 
@@ -41,6 +43,8 @@ export type GameCableSubscribeOptions = {
   inviteCode?: string
   onConnected?: () => void
   onDisconnected?: () => void
+  /** Server rejected subscription (e.g. not logged in or not in game roster). */
+  onRejected?: () => void
 }
 
 export function subscribeToGame(
@@ -59,6 +63,9 @@ export function subscribeToGame(
     },
     disconnected() {
       options?.onDisconnected?.()
+    },
+    rejected() {
+      options?.onRejected?.()
     },
     received(data: GameCableEvent & { revision?: number }) {
       onEvent(data)

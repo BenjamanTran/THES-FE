@@ -63,9 +63,3 @@ export function deletePendingMatches(gameId: number) {
   )
 }
 
-export function generateMatchBatch(gameId: number, count: 5 | 10 | 15) {
-  return request<{ matches: MatchDetail[] }>(`/api/v1/games/${gameId}/matches/generate_batch`, {
-    method: "POST",
-    body: JSON.stringify({ count }),
-  })
-}

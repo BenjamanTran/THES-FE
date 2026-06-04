@@ -15,8 +15,6 @@ export function suggestionAnimateKey(
     case "create":
     case "queue":
       return `${suggestion.kind}-${suggestion.teamA.join("-")}-${suggestion.teamB.join("-")}`
-    case "batch":
-      return "batch"
     default:
       return suggestion.kind
   }

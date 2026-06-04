@@ -8,7 +8,7 @@ import { MatchStatusBadge, getMatchStatusMeta } from "./match-status-badge"
 import { ratingToStars } from "@/lib/rating-stars"
 import { cn } from "@/lib/utils"
 import type { GameDetail, MatchSummary } from "@/lib/api"
-import { getPendingStartBlockReason } from "@/lib/suggest-next-match"
+import { activeGamePlayerIds, getPendingStartBlockReason } from "@/lib/suggest-next-match"
 
 export interface GameMatchCardProps {
   match: MatchSummary
@@ -158,9 +158,17 @@ export function GameMatchCard({
   const statusMeta = getMatchStatusMeta(match.status, !!match.winner_team)
 
   const playersNeeded = game.match_type === "singles" ? 2 : 4
+  const activePlayerIds = activeGamePlayerIds(game)
   const startBlockReason =
     isPending && allMatches && busyPlayerIds
-      ? getPendingStartBlockReason(match, game, allMatches, busyPlayerIds, playersNeeded)
+      ? getPendingStartBlockReason(
+          match,
+          game,
+          allMatches,
+          busyPlayerIds,
+          activePlayerIds,
+          playersNeeded,
+        )
       : null
   const startBlocked = isPending && !!startBlockReason
   const hasScores =

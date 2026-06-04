@@ -9,6 +9,7 @@ import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useAuth } from "@/lib/auth-context";
+import { resolvePostAuthPath } from "@/lib/game-paths";
 
 export default function LoginPage() {
   return (
@@ -33,8 +34,8 @@ function LoginForm() {
     setError(null);
     setSubmitting(true);
     try {
-      await login(email.trim(), password);
-      router.replace(next);
+      const signedIn = await login(email.trim(), password);
+      router.replace(resolvePostAuthPath(next, signedIn.active_manage_game?.id));
     } catch (err) {
       setError(err instanceof Error ? err.message : "Đăng nhập thất bại");
     } finally {

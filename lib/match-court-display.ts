@@ -26,7 +26,7 @@ function sortPending(a: MatchCourtInput, b: MatchCourtInput) {
   return a.match_number - b.match_number || a.id - b.id
 }
 
-/** Số sân hiển thị: DB nếu có, không thì suy ra từ sân game + trận đang đấu/chờ. */
+/** Court count for display: from DB when set, else inferred from game courts + ongoing/pending matches. */
 export function resolveDisplayCourtNumber(
   match: MatchCourtInput,
   allMatches: MatchCourtInput[],

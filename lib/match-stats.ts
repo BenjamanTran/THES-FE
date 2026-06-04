@@ -6,7 +6,7 @@ export interface PlayerSessionStats {
   losses: number
 }
 
-/** Finished matches only — displayed as "X trận" / W-L on game detail. */
+/** Finished matches only — drives played count and W-L on game detail. */
 export function computePlayerMatchCounts(matches: MatchSummary[] | undefined) {
   const counts: Record<number, PlayerSessionStats> = {}
   if (!matches) return counts
@@ -80,6 +80,61 @@ export function matchCountsFromList(
   }
 }
 
+/** Keep tab badges in sync when only ongoing/pending are loaded but status changes over cable. */
+export function applyLiveMatchCountDeltas(
+  prevCounts: GameMatchCounts | undefined,
+  prevMatches: MatchSummary[],
+  nextMatches: MatchSummary[],
+  finishedLoaded: boolean,
+): GameMatchCounts {
+  const base = matchCountsFromList(nextMatches, {
+    fallbackFinished: prevCounts?.finished,
+    finishedLoaded,
+  })
+  if (finishedLoaded) return base
+
+  const prevById = new Map(prevMatches.map((m) => [m.id, m]))
+  let finishedDelta = 0
+  let ongoingDelta = 0
+  let pendingDelta = 0
+
+  for (const m of nextMatches) {
+    const old = prevById.get(m.id)
+    if (!old) {
+      if (m.status === "pending") pendingDelta += 1
+      else if (m.status === "ongoing") ongoingDelta += 1
+      else if (m.status === "finished") finishedDelta += 1
+      continue
+    }
+    if (old.status === m.status) continue
+    if (old.status === "ongoing" && m.status === "finished") {
+      finishedDelta += 1
+      ongoingDelta -= 1
+    } else if (old.status === "pending" && m.status === "ongoing") {
+      pendingDelta -= 1
+      ongoingDelta += 1
+    } else if (old.status === "pending" && m.status === "finished") {
+      pendingDelta -= 1
+      finishedDelta += 1
+    }
+  }
+
+  for (const old of prevMatches) {
+    if (nextMatches.some((m) => m.id === old.id)) continue
+    if (old.status === "pending") pendingDelta -= 1
+    else if (old.status === "ongoing") ongoingDelta -= 1
+    else if (old.status === "finished") finishedDelta -= 1
+  }
+
+  if (finishedDelta === 0 && ongoingDelta === 0 && pendingDelta === 0) return base
+
+  return {
+    pending: Math.max(0, (prevCounts?.pending ?? base.pending) + pendingDelta),
+    ongoing: Math.max(0, (prevCounts?.ongoing ?? base.ongoing) + ongoingDelta),
+    finished: Math.max(0, (prevCounts?.finished ?? 0) + finishedDelta),
+  }
+}
+
 export function minSessionPlayed(counts: Record<number, PlayerSessionStats>) {
   const values = Object.values(counts).map((c) => c.played)
   if (values.length === 0) return 0
@@ -102,17 +157,18 @@ export function rotationFairnessCounts(
   matches: MatchSummary[] | undefined,
 ): Record<number, number> {
   const rotation = computeRotationCounts(matches)
+  const finished = computePlayerMatchCounts(matches)
   const counts: Record<number, number> = {}
   for (const p of players) {
-    counts[p.id] = Math.max(rotation[p.id] ?? 0, p.session_matches?.played ?? 0)
+    counts[p.id] = Math.max(rotation[p.id] ?? 0, finished[p.id]?.played ?? 0)
   }
   return counts
 }
 
-/** Hide/disable 「Sắp xếp cặp đấu」 when session spread reaches this (inclusive). */
+/** Hide/disable pair-arrange action when session played spread reaches this (inclusive). */
 export const PAIR_ARRANGE_MAX_SPREAD = 2
 
-/** Max − min played in session (same basis as player list "X trận", no pending queue). */
+/** Max − min played in session (same basis as player list match count; excludes pending queue). */
 export function sessionPlayedSpread(
   players: GamePlayer[],
   matches: MatchSummary[] | undefined,
@@ -144,9 +200,10 @@ export function compositeFairnessCounts(
 ): Record<number, number> {
   const rotation = computeRotationCounts(matches)
   const scheduled = scheduledOverride ?? computeScheduledCounts(matches)
+  const finished = computePlayerMatchCounts(matches)
   const counts: Record<number, number> = {}
   for (const p of players) {
-    const playedFinished = p.session_matches?.played ?? 0
+    const playedFinished = finished[p.id]?.played ?? 0
     const playedLive = Math.max(playedFinished, rotation[p.id] ?? 0)
     counts[p.id] = playedLive * 1000 + (scheduled[p.id] ?? 0)
   }
@@ -164,32 +221,30 @@ export function sessionMatchCountsFromPlayers(
 }
 
 /**
- * Player list "X trận": finished in this session (API) + ongoing on court if not yet in API.
- * Pending queue slots are excluded — batch "Xếp 10 trận" must not inflate totals before play.
+ * Legacy player list match count / W-L: derived from finished matches + ongoing on court.
+ * Ignores manual session_played_count (simple UI only). Pending queue excluded.
  */
 export function computePlayerDisplayCounts(
-  players: { id: number; session_matches?: PlayerSessionStats }[],
+  players: { id: number }[],
   matches: MatchSummary[] | undefined,
 ): Record<number, PlayerSessionStats> {
-  const base = sessionMatchCountsFromPlayers(players)
-  const onCourt: Record<number, number> = {}
+  const fromFinished = computePlayerMatchCounts(matches)
+  const counts: Record<number, PlayerSessionStats> = {}
+
+  for (const p of players) {
+    counts[p.id] = fromFinished[p.id]
+      ? { ...fromFinished[p.id] }
+      : { played: 0, wins: 0, losses: 0 }
+  }
 
   for (const match of matches ?? []) {
     if (match.status !== "ongoing") continue
     for (const p of [...(match.team_a || []), ...(match.team_b || [])]) {
-      onCourt[p.id] = (onCourt[p.id] ?? 0) + 1
+      if (!counts[p.id]) counts[p.id] = { played: 0, wins: 0, losses: 0 }
+      counts[p.id] = { ...counts[p.id], played: counts[p.id].played + 1 }
     }
   }
 
-  const counts: Record<number, PlayerSessionStats> = {}
-  for (const p of players) {
-    const b = base[p.id] ?? { played: 0, wins: 0, losses: 0 }
-    const live = onCourt[p.id] ?? 0
-    counts[p.id] = {
-      ...b,
-      played: b.played + live,
-    }
-  }
   return counts
 }
 

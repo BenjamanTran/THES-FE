@@ -122,6 +122,7 @@ export interface GamePlayer {
   host_rated_stars?: number | null
   host_rating_note?: string | null
   session_matches?: { played: number; wins: number; losses: number }
+  arrived_at_court?: boolean
 }
 
 export interface GameMatchCounts {
@@ -190,7 +191,7 @@ export interface FinishMatchResponse {
 export interface CreateMatchParams {
   team_a: number[]
   team_b: number[]
-  /** Host "Sắp xếp cặp đấu" — keeps pairs on sides, counts toward quota */
+  /** Host pair-arrange match — keeps pairs on sides, counts toward quota */
   arranged_as_pairs?: boolean
 }
 
@@ -199,7 +200,7 @@ export interface GamePlayerPair {
   user_a_id: number
   user_b_id: number
   status: "active" | "dissolved"
-  /** Pair-arranged matches used (「Sắp xếp cặp đấu」), per pair */
+  /** Pair-arranged matches used (pair-arrange feature), per pair */
   matches_used?: number
 }
 
@@ -261,6 +262,12 @@ export interface PlaceholderPlayerParams {
   stars: number
 }
 
+/** Host/co-host game with live session — used to deep-link on app open. */
+export interface ActiveManageGame {
+  id: number
+  title: string | null
+}
+
 export interface AuthUser {
   id: number
   email: string | null
@@ -274,6 +281,7 @@ export interface AuthUser {
   declared_rank?: PlayerRank | null
   stats?: UserStats
   profile?: UserProfile
+  active_manage_game?: ActiveManageGame | null
 }
 
 export interface UpdateProfileParams {
@@ -284,10 +292,18 @@ export interface UpdateProfileParams {
   stars?: number
 }
 
+export type GameDetailScreenVariant = "legacy" | "simple"
+
+export interface ExperimentsPayload {
+  game_detail_screen: GameDetailScreenVariant
+}
+
 export interface AuthResponse {
   user: AuthUser
   stats?: UserStats
   profile?: UserProfile
+  experiments?: ExperimentsPayload
+  active_manage_game?: ActiveManageGame | null
 }
 
 export type InviteGameMode = "join" | "live" | "closed"

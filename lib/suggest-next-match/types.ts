@@ -1,18 +1,20 @@
 import type { MatchSummary } from "@/lib/api"
 
+export type SuggestQueueAction = {
+  teamA: number[]
+  teamB: number[]
+  label: string
+  reason: string
+}
+
 export type NextMatchSuggestion =
   | {
       kind: "start"
       match: MatchSummary
       label: string
       reason: string
-      /** Khi lệch lượt ≥ 1: ghép mới 4 người rảnh song song với bắt đầu hàng chờ */
-      altCreate?: {
-        teamA: number[]
-        teamB: number[]
-        label: string
-        reason: string
-      }
+      /** Optional next pending lineup (pipeline; may overlap with on-court players). */
+      altQueue?: SuggestQueueAction
     }
   | {
       kind: "create"
@@ -20,6 +22,7 @@ export type NextMatchSuggestion =
       teamB: number[]
       label: string
       reason: string
+      altQueue?: SuggestQueueAction
     }
   | {
       kind: "queue"
@@ -37,11 +40,6 @@ export type NextMatchSuggestion =
   | {
       kind: "wait_players"
       match: MatchSummary
-      label: string
-      reason: string
-    }
-  | {
-      kind: "batch"
       label: string
       reason: string
     }

@@ -10,13 +10,9 @@ interface NextMatchSuggestProps {
   /** Live start / create+start only when within game time window */
   isGameTime?: boolean
   loading?: boolean
-  batchLoading?: boolean
-  /** Hide bulk queue when more than 2 matches are already waiting */
-  showBatchActions?: boolean
   onStart: () => void
   onCreateAndStart: () => void
   onQueue: () => void
-  onGenerateBatch: () => void
   /** Doubles: arrange match keeping pairs on each side (free players only) */
   showPairArrange?: boolean
   pairArrangeLabel?: string
@@ -30,12 +26,9 @@ export function NextMatchSuggest({
   suggestion,
   isGameTime = true,
   loading,
-  batchLoading,
-  showBatchActions = true,
   onStart,
   onCreateAndStart,
   onQueue,
-  onGenerateBatch,
   showPairArrange = false,
   pairArrangeLabel = "Sắp xếp cặp đấu",
   pairArrangeHint,
@@ -44,29 +37,16 @@ export function NextMatchSuggest({
   pairArrangeLoading = false,
 }: NextMatchSuggestProps) {
   if (!suggestion) {
-    if (!showPairArrange && !showBatchActions) return null
+    if (!showPairArrange || !onArrangePair) return null
     return (
       <div className="rounded-xl border border-border/40 bg-secondary/20 px-3 py-2.5 mb-2 space-y-2 transition-colors duration-300">
-        {showPairArrange && onArrangePair ? (
-          <PairArrangeBlock
-            label={pairArrangeLabel}
-            hint={pairArrangeHint}
-            disabled={pairArrangeDisabled}
-            loading={pairArrangeLoading || loading || batchLoading}
-            onArrangePair={onArrangePair}
-          />
-        ) : null}
-        {showBatchActions ? (
-          <Button
-            size="sm"
-            variant="secondary"
-            className="w-full h-8 rounded-full text-[11px] font-medium"
-            disabled={loading || batchLoading || pairArrangeLoading}
-            onClick={onGenerateBatch}
-          >
-            {batchLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : "Xếp 10 trận"}
-          </Button>
-        ) : null}
+        <PairArrangeBlock
+          label={pairArrangeLabel}
+          hint={pairArrangeHint}
+          disabled={pairArrangeDisabled}
+          loading={pairArrangeLoading || loading}
+          onArrangePair={onArrangePair}
+        />
       </div>
     )
   }
@@ -74,10 +54,10 @@ export function NextMatchSuggest({
   const isWaitCourt = suggestion.kind === "wait_court"
   const isWaitPlayers = suggestion.kind === "wait_players"
   const isWait = isWaitCourt || isWaitPlayers
-  const isBatchOnly = suggestion.kind === "batch"
-
-  const altCreate =
-    suggestion.kind === "start" ? suggestion.altCreate : undefined
+  const altQueue =
+    suggestion.kind === "start" || suggestion.kind === "create"
+      ? suggestion.altQueue
+      : undefined
 
   let primaryLabel: string | null = null
   let PrimaryIcon: LucideIcon | null = null
@@ -86,15 +66,8 @@ export function NextMatchSuggest({
   let SecondaryIcon: LucideIcon | null = null
   let secondaryOnClick: (() => void) | null = null
 
-  if (!isWait && !isBatchOnly) {
-    if (suggestion.kind === "start" && isGameTime && altCreate) {
-      primaryLabel = "Tạo & bắt đầu"
-      PrimaryIcon = Plus
-      primaryOnClick = onCreateAndStart
-      secondaryLabel = "Bắt đầu"
-      SecondaryIcon = Play
-      secondaryOnClick = onStart
-    } else if (suggestion.kind === "start" && isGameTime) {
+  if (!isWait) {
+    if (suggestion.kind === "start" && isGameTime) {
       primaryLabel = "Bắt đầu"
       PrimaryIcon = Play
       primaryOnClick = onStart
@@ -106,6 +79,12 @@ export function NextMatchSuggest({
       primaryLabel = "Tạo & bắt đầu"
       PrimaryIcon = Plus
       primaryOnClick = onCreateAndStart
+    }
+
+    if (altQueue && isGameTime && suggestion.kind !== "queue") {
+      secondaryLabel = "Thêm hàng chờ"
+      SecondaryIcon = ListPlus
+      secondaryOnClick = onQueue
     }
   }
 
@@ -131,18 +110,21 @@ export function NextMatchSuggest({
                   : "Gợi ý trận tiếp theo"}
           </p>
           <p className="text-xs font-medium text-foreground mt-0.5 leading-snug break-words">
-            {altCreate ? altCreate.label : suggestion.label}
+            {suggestion.label}
           </p>
-          <p className="text-[10px] text-muted-foreground mt-0.5">
-            {altCreate ? `${altCreate.reason} · Hàng chờ: ${suggestion.label}` : suggestion.reason}
-          </p>
+          <p className="text-[10px] text-muted-foreground mt-0.5">{suggestion.reason}</p>
+          {altQueue ? (
+            <p className="text-[10px] text-primary/90 mt-1 leading-snug">
+              Hàng chờ tiếp: {altQueue.label} — {altQueue.reason}
+            </p>
+          ) : null}
         </div>
         <div className="flex flex-col gap-1 shrink-0">
           {primaryLabel && PrimaryIcon && primaryOnClick ? (
             <Button
               size="sm"
               className="h-9 rounded-full bg-emerald-600 hover:bg-emerald-700 text-white text-xs px-3"
-              disabled={loading || batchLoading}
+              disabled={loading}
               onClick={primaryOnClick}
             >
               {loading ? (
@@ -160,7 +142,7 @@ export function NextMatchSuggest({
               size="sm"
               variant="outline"
               className="h-8 rounded-full text-xs px-3"
-              disabled={loading || batchLoading}
+              disabled={loading}
               onClick={secondaryOnClick}
             >
               <SecondaryIcon className="w-3.5 h-3.5 mr-1" />
@@ -170,32 +152,15 @@ export function NextMatchSuggest({
         </div>
       </div>
 
-      {showBatchActions || showPairArrange ? (
-        <div className="mt-2 pl-6 space-y-1.5">
-          {showPairArrange && onArrangePair ? (
-            <PairArrangeBlock
-              label={pairArrangeLabel}
-              hint={pairArrangeHint}
-              disabled={pairArrangeDisabled}
-              loading={pairArrangeLoading || loading || batchLoading}
-              onArrangePair={onArrangePair}
-            />
-          ) : null}
-          {showBatchActions ? (
-            <Button
-              size="sm"
-              variant="secondary"
-              className="w-full h-8 rounded-full text-[11px] font-medium"
-              disabled={loading || batchLoading || pairArrangeLoading}
-              onClick={onGenerateBatch}
-            >
-              {batchLoading ? (
-                <Loader2 className="w-3.5 h-3.5 animate-spin" />
-              ) : (
-                "Xếp 10 trận"
-              )}
-            </Button>
-          ) : null}
+      {showPairArrange && onArrangePair ? (
+        <div className="mt-2 pl-6">
+          <PairArrangeBlock
+            label={pairArrangeLabel}
+            hint={pairArrangeHint}
+            disabled={pairArrangeDisabled}
+            loading={pairArrangeLoading || loading}
+            onArrangePair={onArrangePair}
+          />
         </div>
       ) : null}
     </div>

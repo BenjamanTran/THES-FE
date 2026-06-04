@@ -25,6 +25,7 @@ import {
   kickPlayer,
   deletePlaceholder,
   ratePlayer,
+  togglePlayerArrived,
   type GameDetail,
   type GamePlayer,
   type MatchSummary,
@@ -33,21 +34,31 @@ import {
 } from "@/lib/api"
 import { useAuth, useRequireAuth } from "@/lib/auth-context"
 import {
-  adjustSessionStatsForFinishedMatch,
   matchCountsFromList,
+  applyLiveMatchCountDeltas,
   maxSessionPlayed,
   computePlayerDisplayCounts,
 } from "@/lib/match-stats"
 import {
+  canAddPendingMatch,
+  pendingQueueFullMessage,
+  pendingQueueStatusLabel,
+} from "@/lib/match-queue-capacity"
+import { sortPendingQueue } from "@/lib/match-queue-order"
+import {
   getMatchStartBlockers,
   isMatchStartable,
+  activeGamePlayerIds,
   canStartAnotherMatch,
   countOngoingMatches,
   getMaxCourts,
+  getOngoingBusyIds,
+  filterStartablePending,
   getPendingStartBlockReason,
   suggestNextMatch,
+  getQueueLineupFromSuggestion,
+  suggestPipelineQueueLineup,
 } from "@/lib/suggest-next-match"
-import { generateMatchBatchFair } from "@/lib/generate-match-batch"
 import { PAIR_ARRANGE_MAX_SPREAD, sessionPlayedSpread } from "@/lib/match-stats"
 import {
   canArrangePairMatch,
@@ -57,10 +68,25 @@ import {
 import { useGameCable } from "@/hooks/use-game-cable"
 import type { GameCableEvent } from "@/lib/game-cable"
 import { reverseGeocode } from "@/lib/geocode"
+import {
+  hasEnoughArrivedPlayers,
+  minPlayersForMatchType,
+  playersArrivedAtCourt,
+} from "@/lib/match-players"
 import { ratingToStars } from "@/lib/rating-stars"
+import { countPlayersByGender, formatPlayerGenderLabel } from "@/lib/player-gender-counts"
 import { fitMeta } from "./meta"
 import { COURT_OPTIONS, MAX_CO_HOSTS, UNDO_MS } from "@/components/smashhub/game-detail/constants"
 import { useGamePlayerPairTap } from "@/components/smashhub/game-detail/game-player-pairs"
+
+function mergePriorityIntoMatches(data: GameDetail): GameDetail {
+  const matches = [...(data.matches ?? [])]
+  const pm = data.priority_match
+  if (pm && pm.status === "pending" && !matches.some((m) => m.id === pm.id)) {
+    matches.push(pm)
+  }
+  return { ...data, matches }
+}
 
 export function useGameDetail(gameId: number | null, onClose: () => void) {
   const { user } = useAuth()
@@ -96,15 +122,8 @@ export function useGameDetail(gameId: number | null, onClose: () => void) {
   const [showGenderSheet, setShowGenderSheet] = useState(false)
   const [editingGenderPlayer, setEditingGenderPlayer] = useState<GamePlayer | null>(null)
   const open = gameId !== null
-
-  function mergePriorityIntoMatches(data: GameDetail): GameDetail {
-    const matches = [...(data.matches ?? [])]
-    const pm = data.priority_match
-    if (pm && pm.status === "pending" && !matches.some((m) => m.id === pm.id)) {
-      matches.push(pm)
-    }
-    return { ...data, matches }
-  }
+  const gameIdRef = useRef(gameId)
+  gameIdRef.current = gameId
 
   const [matchTab, setMatchTab] = useState<"live" | "queue" | "done">("live")
   const [matchesLoaded, setMatchesLoaded] = useState({ pending: false, finished: false })
@@ -112,17 +131,19 @@ export function useGameDetail(gameId: number | null, onClose: () => void) {
   const matchesLoadedRef = useRef(matchesLoaded)
   matchesLoadedRef.current = matchesLoaded
 
-  const syncGameMatches = useCallback(
-    (prev: GameDetail, matches: MatchSummary[]): GameDetail => ({
+  const syncGameMatches = useCallback((prev: GameDetail, matches: MatchSummary[]): GameDetail => {
+    const prevMatches = prev.matches ?? []
+    return {
       ...prev,
       matches,
-      match_counts: matchCountsFromList(matches, {
-        fallbackFinished: prev.match_counts?.finished,
-        finishedLoaded: matchesLoadedRef.current.finished,
-      }),
-    }),
-    [],
-  )
+      match_counts: applyLiveMatchCountDeltas(
+        prev.match_counts,
+        prevMatches,
+        matches,
+        matchesLoadedRef.current.finished,
+      ),
+    }
+  }, [])
 
   const mergeMatchesByStatus = useCallback(
     (incoming: MatchSummary[], status: MatchSummary["status"]) => {
@@ -148,6 +169,60 @@ export function useGameDetail(gameId: number | null, onClose: () => void) {
       pending: hasPending || pendingCount > 0,
     }))
   }, [])
+
+  const lastLiveSyncRef = useRef(0)
+  const liveSyncInFlightRef = useRef(false)
+
+  /** Lightweight sync of ongoing + pending (no loading UI). */
+  const reloadLiveSnapshot = useCallback(async () => {
+    const id = gameIdRef.current
+    if (id == null || liveSyncInFlightRef.current) return
+    liveSyncInFlightRef.current = true
+    try {
+      const [{ matches: ongoing }, { matches: pending }] = await Promise.all([
+        fetchMatches(id, "ongoing"),
+        fetchMatches(id, "pending"),
+      ])
+      const live = [...ongoing, ...pending].sort((a, b) => {
+        const order = (s: MatchSummary["status"]) => (s === "ongoing" ? 0 : 1)
+        const d = order(a.status) - order(b.status)
+        if (d !== 0) return d
+        if (a.status === "pending" && b.status === "pending" && a.priority !== b.priority) {
+          return a.priority ? -1 : 1
+        }
+        return a.match_number - b.match_number
+      })
+      const priority = pending.find((m) => m.priority) ?? null
+      lastLiveSyncRef.current = Date.now()
+      setGame((prev) => {
+        if (!prev) return prev
+        const finished = matchesLoadedRef.current.finished
+          ? (prev.matches ?? []).filter((m) => m.status === "finished")
+          : []
+        return {
+          ...syncGameMatches(prev, [...finished, ...live]),
+          priority_match: priority,
+        }
+      })
+    } catch {
+      /* background sync — ignore */
+    } finally {
+      liveSyncInFlightRef.current = false
+    }
+  }, [syncGameMatches])
+
+  const liveSyncTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const scheduleLiveSnapshot = useCallback(
+    (delayMs = 0) => {
+      if (gameIdRef.current == null) return
+      if (liveSyncTimerRef.current) clearTimeout(liveSyncTimerRef.current)
+      liveSyncTimerRef.current = setTimeout(() => {
+        liveSyncTimerRef.current = null
+        void reloadLiveSnapshot()
+      }, delayMs)
+    },
+    [reloadLiveSnapshot],
+  )
 
   const loadGame = useCallback(
     async (id: number) => {
@@ -186,6 +261,21 @@ export function useGameDetail(gameId: number | null, onClose: () => void) {
     }
   }, [game?.id, mergeMatchesByStatus])
 
+  const loadPendingMatches = useCallback(async () => {
+    if (!game?.id || matchesLoadedRef.current.pending) return
+
+    setTabMatchesLoading(true)
+    try {
+      const { matches } = await fetchMatches(game.id, "pending")
+      mergeMatchesByStatus(matches, "pending")
+      setMatchesLoaded((s) => ({ ...s, pending: true }))
+    } catch {
+      toast.error("Không tải được hàng chờ")
+    } finally {
+      setTabMatchesLoading(false)
+    }
+  }, [game?.id, mergeMatchesByStatus])
+
   useEffect(() => {
     if (gameId === null) {
       setGame(null)
@@ -210,6 +300,20 @@ export function useGameDetail(gameId: number | null, onClose: () => void) {
         const data = await fetchGame(gameId)
         if (cancelled) return
         applyGameDetail(data)
+        const finishedCount = data.match_counts?.finished ?? 0
+        if (finishedCount > 0) {
+          const { matches } = await fetchMatches(gameId, "finished")
+          if (cancelled) return
+          mergeMatchesByStatus(matches, "finished")
+          setMatchesLoaded((s) => ({ ...s, finished: true }))
+        }
+        const pendingCount = data.match_counts?.pending ?? 0
+        if (pendingCount > 0 && !(data.matches ?? []).some((m) => m.status === "pending")) {
+          const { matches } = await fetchMatches(gameId, "pending")
+          if (cancelled) return
+          mergeMatchesByStatus(matches, "pending")
+          setMatchesLoaded((s) => ({ ...s, pending: true }))
+        }
       } catch (err) {
         if (!cancelled) {
           setError(err instanceof Error ? err.message : "Không tải được trận đấu")
@@ -221,11 +325,15 @@ export function useGameDetail(gameId: number | null, onClose: () => void) {
     return () => {
       cancelled = true
     }
-  }, [gameId, applyGameDetail])
+  }, [gameId, applyGameDetail, mergeMatchesByStatus])
 
   useEffect(() => {
     if (matchTab === "done") void loadFinishedMatches()
   }, [matchTab, game?.id, loadFinishedMatches])
+
+  useEffect(() => {
+    if (matchTab === "queue") void loadPendingMatches()
+  }, [matchTab, game?.id, loadPendingMatches])
 
   useEffect(() => {
     setResolvedAddress(null)
@@ -410,7 +518,6 @@ export function useGameDetail(gameId: number | null, onClose: () => void) {
 
   const [startingMatchId, setStartingMatchId] = useState<number | null>(null)
   const [suggestActionLoading, setSuggestActionLoading] = useState(false)
-  const [batchLoading, setBatchLoading] = useState(false)
   const [pairArrangeLoading, setPairArrangeLoading] = useState(false)
   const [finishingMatchId, setFinishingMatchId] = useState<number | null>(null)
   const [togglingPriorityId, setTogglingPriorityId] = useState<number | null>(null)
@@ -454,46 +561,22 @@ export function useGameDetail(gameId: number | null, onClose: () => void) {
   const patchMatchInGame = useCallback((updated: MatchSummary) => {
     setGame((prev) => {
       if (!prev) return prev
-      const prevMatch = (prev.matches ?? []).find((m) => m.id === updated.id)
-      let players = prev.players ?? []
-
-      if (
-        prevMatch?.status === "finished" &&
-        updated.status !== "finished" &&
-        prevMatch.winner_team
-      ) {
-        players = adjustSessionStatsForFinishedMatch(players, prevMatch, -1)
-      } else if (
-        updated.status === "finished" &&
-        prevMatch?.status !== "finished" &&
-        updated.winner_team
-      ) {
-        players = adjustSessionStatsForFinishedMatch(players, updated, 1)
-      } else if (
-        prevMatch?.status === "finished" &&
-        updated.status === "finished" &&
-        prevMatch.winner_team &&
-        updated.winner_team &&
-        prevMatch.winner_team !== updated.winner_team
-      ) {
-        players = adjustSessionStatsForFinishedMatch(players, prevMatch, -1)
-        players = adjustSessionStatsForFinishedMatch(players, updated, 1)
-      }
-
-      const matches = (prev.matches ?? []).map((m) => {
-        if (m.id === updated.id) return { ...m, ...updated }
-        if (updated.priority && updated.status === "pending") return { ...m, priority: false }
-        return m
-      })
-      const hasMatch = matches.some((m) => m.id === updated.id)
+      const prevMatches = prev.matches ?? []
+      const hasMatch = prevMatches.some((m) => m.id === updated.id)
+      const merged = hasMatch
+        ? prevMatches.map((m) => {
+            if (m.id === updated.id) return { ...m, ...updated }
+            if (updated.priority && updated.status === "pending") return { ...m, priority: false }
+            return m
+          })
+        : [...prevMatches, updated]
       const nextMatches =
-        hasMatch || updated.status !== "pending"
-          ? matches
-          : [...matches, updated]
+        updated.priority && updated.status === "pending"
+          ? merged.map((m) => (m.id === updated.id ? m : { ...m, priority: false }))
+          : merged
       const next = syncGameMatches(prev, nextMatches)
       return {
         ...next,
-        players,
         priority_match:
           updated.priority && updated.status === "pending"
             ? updated
@@ -506,13 +589,20 @@ export function useGameDetail(gameId: number | null, onClose: () => void) {
 
   const handleCableEvent = useCallback(
     (payload: GameCableEvent) => {
+      if (payload.event === "game.refresh") {
+        const id = gameIdRef.current
+        if (id != null) void loadGame(id)
+        return
+      }
       if (payload.event === "match.deleted") {
         setGame((prev) => {
           if (!prev?.matches) return prev
-          return syncGameMatches(
-            prev,
-            prev.matches.filter((m) => m.id !== payload.match_id),
-          )
+          const nextMatches = prev.matches.filter((m) => m.id !== payload.match_id)
+          return {
+            ...syncGameMatches(prev, nextMatches),
+            priority_match:
+              prev.priority_match?.id === payload.match_id ? null : prev.priority_match,
+          }
         })
         return
       }
@@ -526,7 +616,7 @@ export function useGameDetail(gameId: number | null, onClose: () => void) {
         patchMatchInGame(payload.match)
       }
     },
-    [patchMatchInGame, syncGameMatches],
+    [loadGame, patchMatchInGame, syncGameMatches],
   )
 
   const cableEnabled =
@@ -536,7 +626,38 @@ export function useGameDetail(gameId: number | null, onClose: () => void) {
     game.status !== "finished" &&
     game.status !== "cancelled"
 
-  useGameCable(gameId, handleCableEvent, cableEnabled)
+  const cableConnected = useGameCable(gameId, handleCableEvent, cableEnabled, {
+    onConnected: () => scheduleLiveSnapshot(0),
+    onRejected: () => scheduleLiveSnapshot(0),
+    onDisconnected: () => scheduleLiveSnapshot(0),
+  })
+
+  useEffect(() => {
+    if (!cableEnabled) return
+    const pollMs = cableConnected ? 60_000 : 5_000
+    const interval = window.setInterval(() => {
+      void reloadLiveSnapshot()
+    }, pollMs)
+    return () => window.clearInterval(interval)
+  }, [cableEnabled, cableConnected, reloadLiveSnapshot])
+
+  useEffect(() => {
+    if (!cableEnabled) return
+    const onVisible = () => {
+      if (document.visibilityState !== "visible") return
+      if (Date.now() - lastLiveSyncRef.current < 2_500) return
+      scheduleLiveSnapshot(0)
+    }
+    document.addEventListener("visibilitychange", onVisible)
+    return () => document.removeEventListener("visibilitychange", onVisible)
+  }, [cableEnabled, scheduleLiveSnapshot])
+
+  useEffect(
+    () => () => {
+      if (liveSyncTimerRef.current) clearTimeout(liveSyncTimerRef.current)
+    },
+    [],
+  )
 
   const handleUndoFinish = useCallback(
     async (matchId: number) => {
@@ -640,6 +761,7 @@ export function useGameDetail(gameId: number | null, onClose: () => void) {
         game,
         allMatches,
         busyIds,
+        activePlayerIds,
         playersNeeded,
       )
       if (blockReason) {
@@ -718,6 +840,37 @@ export function useGameDetail(gameId: number | null, onClose: () => void) {
     setShowGenderSheet(true)
   }
 
+  const handleToggleArrived = async (player: GamePlayer) => {
+    if (!game || !canManage) return
+    const next = !player.arrived_at_court
+    setGame((g) => {
+      if (!g) return g
+      return {
+        ...g,
+        players: g.players.map((p) =>
+          p.id === player.id ? { ...p, arrived_at_court: next } : p,
+        ),
+      }
+    })
+    try {
+      const { player: updated } = await togglePlayerArrived(game.id, player.id, next)
+      setGame((g) =>
+        g ? { ...g, players: g.players.map((p) => (p.id === player.id ? updated : p)) } : g,
+      )
+    } catch (err) {
+      setGame((g) => {
+        if (!g) return g
+        return {
+          ...g,
+          players: g.players.map((p) =>
+            p.id === player.id ? { ...p, arrived_at_court: !next } : p,
+          ),
+        }
+      })
+      toast.error(err instanceof Error ? err.message : "Không cập nhật được trạng thái")
+    }
+  }
+
   const handleDeletePlaceholder = async (userId: number, name: string | null) => {
     if (!game) return
     if (!window.confirm(`Xóa ${name || "người tạm"} khỏi danh sách?`)) return
@@ -759,13 +912,31 @@ export function useGameDetail(gameId: number | null, onClose: () => void) {
     }
   }
 
-  const minPlayersForMatch = game?.match_type === "doubles" ? 4 : 2
+  const minPlayersForMatch = minPlayersForMatchType(game?.match_type ?? "doubles")
   const joinedPlayerCount = Math.max(game?.players_count ?? 0, game?.players?.length ?? 0)
   const hasEnoughPlayers = joinedPlayerCount >= minPlayersForMatch
+  const matchmakingPlayers = useMemo(
+    () => playersArrivedAtCourt(game?.players),
+    [game?.players],
+  )
+  const arrivedCount = matchmakingPlayers.length
+  const playerGenderLabel = useMemo(
+    () => formatPlayerGenderLabel(countPlayersByGender(game?.players ?? [])),
+    [game?.players],
+  )
+  const hasEnoughArrived = hasEnoughArrivedPlayers(game?.players, game?.match_type ?? "doubles")
   const gameAllowsMatches =
     game?.status === "open" || game?.status === "full" || game?.status === "ongoing"
-  const canPlanMatches = canManage && gameAllowsMatches && hasEnoughPlayers
-  const canCreateMatch = canPlanMatches
+  const canPlanMatches = canManage && gameAllowsMatches && hasEnoughArrived
+  const canAddToPendingQueue = useMemo(
+    () => (game ? canAddPendingMatch(game, game.matches) : false),
+    [game],
+  )
+  const pendingQueueLabel = useMemo(
+    () => (game ? pendingQueueStatusLabel(game, game.matches) : ""),
+    [game],
+  )
+  const canCreateMatch = canPlanMatches && canAddToPendingQueue
   const totalMatchCount = useMemo(() => {
     const c = matchCountsFromList(game?.matches, {
       fallbackFinished: game?.match_counts?.finished,
@@ -806,9 +977,7 @@ export function useGameDetail(gameId: number | null, onClose: () => void) {
     const all = game?.matches ?? []
     return {
       ongoingMatches: all.filter((m) => m.status === "ongoing"),
-      pendingMatches: all
-        .filter((m) => m.status === "pending")
-        .sort((a, b) => a.match_number - b.match_number),
+      pendingMatches: sortPendingQueue(all.filter((m) => m.status === "pending")),
       finishedMatches: all
         .filter((m) => m.status === "finished")
         .sort((a, b) => b.match_number - a.match_number),
@@ -886,6 +1055,11 @@ export function useGameDetail(gameId: number | null, onClose: () => void) {
 
   const playersNeeded = game?.match_type === "singles" ? 2 : 4
 
+  const activePlayerIds = useMemo(
+    () => (game ? activeGamePlayerIds(game) : new Set<number>()),
+    [game],
+  )
+
   const priorityMatch = useMemo(() => {
     if (!game) return null
     if (game.priority_match?.status === "pending") return game.priority_match
@@ -896,9 +1070,9 @@ export function useGameDetail(gameId: number | null, onClose: () => void) {
     if (!priorityMatch || !isGameTime || !game) return false
     return (
       canStartAnotherMatch(game.matches ?? [], getMaxCourts(game)) &&
-      isMatchStartable(priorityMatch, busyPlayerIds, playersNeeded)
+      isMatchStartable(priorityMatch, busyPlayerIds, activePlayerIds, playersNeeded)
     )
-  }, [priorityMatch, busyPlayerIds, playersNeeded, isGameTime, game])
+  }, [priorityMatch, busyPlayerIds, activePlayerIds, playersNeeded, isGameTime, game])
 
   const priorityReason = useMemo(() => {
     if (!priorityMatch || !game) return ""
@@ -914,8 +1088,13 @@ export function useGameDetail(gameId: number | null, onClose: () => void) {
 
   const nextSuggestion = useMemo(() => {
     if (!game || !canPlanMatches) return null
-    return suggestNextMatch(game, game.players ?? [], game.matches ?? [])
-  }, [game, canPlanMatches])
+    return suggestNextMatch(game, matchmakingPlayers, game.matches ?? [])
+  }, [game, canPlanMatches, matchmakingPlayers])
+
+  const nextPipelineLineup = useMemo(() => {
+    if (!game || !canPlanMatches || !canAddToPendingQueue) return null
+    return suggestPipelineQueueLineup(game, matchmakingPlayers, game.matches ?? [])
+  }, [game, canPlanMatches, matchmakingPlayers, canAddToPendingQueue])
 
   const hideSuggestForPriority =
     priorityMatch &&
@@ -926,8 +1105,8 @@ export function useGameDetail(gameId: number | null, onClose: () => void) {
 
   const pairMatchPlan = useMemo(() => {
     if (!game || game.match_type !== "doubles" || !canPlanMatches) return null
-    return suggestPairDoublesMatch(game, game.players ?? [], game.matches ?? [])
-  }, [game, canPlanMatches])
+    return suggestPairDoublesMatch(game, matchmakingPlayers, game.matches ?? [])
+  }, [game, canPlanMatches, matchmakingPlayers])
 
   const pairSessionSpread = useMemo(() => {
     if (!game?.players?.length) return 0
@@ -976,26 +1155,29 @@ export function useGameDetail(gameId: number | null, onClose: () => void) {
   }
 
   const handleCreateAndStartSuggested = async () => {
-    if (!game || !nextSuggestion) return
-    const lineup =
-      nextSuggestion.kind === "create"
-        ? { teamA: nextSuggestion.teamA, teamB: nextSuggestion.teamB }
-        : nextSuggestion.kind === "start" && nextSuggestion.altCreate
-          ? {
-              teamA: nextSuggestion.altCreate.teamA,
-              teamB: nextSuggestion.altCreate.teamB,
-            }
-          : null
-    if (!lineup) return
+    if (!game || !nextSuggestion || nextSuggestion.kind !== "create") return
+    const lineup = { teamA: nextSuggestion.teamA, teamB: nextSuggestion.teamB }
     setSuggestActionLoading(true)
     try {
+      const matches = game.matches ?? []
       const maxCourts = getMaxCourts(game)
-      const ongoingCount = countOngoingMatches(game.matches ?? [])
+      const ongoingCount = countOngoingMatches(matches)
+      if (!canStartAnotherMatch(matches, maxCourts)) {
+        toast.error(`Sân đầy (${ongoingCount}/${maxCourts}) — kết thúc trận trên sân trước`)
+        return
+      }
+      const busyIds = getOngoingBusyIds(matches)
+      const pending = matches.filter((m) => m.status === "pending")
+      const startable = filterStartablePending(pending, busyIds, activePlayerIds, playersNeeded)
+      if (startable.length > 0) {
+        toast.error("Còn trận chờ sẵn sàng — bắt đầu hàng chờ trước")
+        return
+      }
       const created = await createMatch(game.id, {
         team_a: lineup.teamA,
         team_b: lineup.teamB,
       })
-      if (!canStartAnotherMatch(game.matches ?? [], maxCourts)) {
+      if (!canStartAnotherMatch(matches, maxCourts)) {
         await loadGame(game.id)
         setMatchTab("queue")
         toast.info(`Sân đầy (${ongoingCount}/${maxCourts}) — đã thêm hàng chờ`)
@@ -1013,12 +1195,22 @@ export function useGameDetail(gameId: number | null, onClose: () => void) {
   }
 
   const handleQueueSuggested = async () => {
-    if (!game || nextSuggestion?.kind !== "queue") return
+    if (!game) return
+    if (!canAddPendingMatch(game, game.matches)) {
+      toast.error(pendingQueueFullMessage(game))
+      return
+    }
+    const lineup =
+      getQueueLineupFromSuggestion(nextSuggestion) ??
+      (nextPipelineLineup
+        ? { teamA: nextPipelineLineup.teamA, teamB: nextPipelineLineup.teamB }
+        : null)
+    if (!lineup) return
     setSuggestActionLoading(true)
     try {
       await createMatch(game.id, {
-        team_a: nextSuggestion.teamA,
-        team_b: nextSuggestion.teamB,
+        team_a: lineup.teamA,
+        team_b: lineup.teamB,
       })
       await loadGame(game.id)
       setMatchTab("queue")
@@ -1032,9 +1224,16 @@ export function useGameDetail(gameId: number | null, onClose: () => void) {
 
   const handleArrangePairMatch = async () => {
     if (!game) return
-    const plan = suggestPairDoublesMatch(game, game.players ?? [], game.matches ?? [])
+    const plan = suggestPairDoublesMatch(game, matchmakingPlayers, game.matches ?? [])
     if ("error" in plan) {
       toast.error(plan.error)
+      return
+    }
+    const maxCourts = getMaxCourts(game)
+    const willQueue =
+      !isGameTime || !canStartAnotherMatch(game.matches ?? [], maxCourts)
+    if (willQueue && !canAddPendingMatch(game, game.matches)) {
+      toast.error(pendingQueueFullMessage(game))
       return
     }
     setPairArrangeLoading(true)
@@ -1064,33 +1263,6 @@ export function useGameDetail(gameId: number | null, onClose: () => void) {
       toast.error(err instanceof Error ? err.message : "Không thể sắp xếp trận cặp")
     } finally {
       setPairArrangeLoading(false)
-    }
-  }
-
-  const handleGenerateBatch = async (count: 10 = 10) => {
-    if (!game) return
-    setBatchLoading(true)
-    try {
-      const { created, errors } = await generateMatchBatchFair(
-        game,
-        game.players ?? [],
-        game.matches ?? [],
-        count,
-      )
-      await loadGame(game.id)
-      if (created > 0) {
-        setMatchTab("queue")
-        toast.success(`Đã xếp ${created} trận — chia lượt đều trong hàng chờ`)
-      }
-      if (errors.length > 0) {
-        toast.error(errors[0])
-      } else if (created === 0) {
-        toast.error("Không thể xếp thêm trận")
-      }
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Không thể xếp trận")
-    } finally {
-      setBatchLoading(false)
     }
   }
 
@@ -1180,7 +1352,6 @@ export function useGameDetail(gameId: number | null, onClose: () => void) {
     handleMatchFinished,
     startingMatchId,
     suggestActionLoading,
-    batchLoading,
     finishingMatchId,
     deletingMatchId,
     deletingAllPending,
@@ -1198,6 +1369,11 @@ export function useGameDetail(gameId: number | null, onClose: () => void) {
     handleDeletePlaceholder,
     openRatingSheet,
     handleRatePlayer,
+    handleToggleArrived,
+    matchmakingPlayers,
+    arrivedCount,
+    playerGenderLabel,
+    hasEnoughArrived,
     canCreateMatch,
     canPlanMatches,
     totalMatchCount,
@@ -1220,13 +1396,15 @@ export function useGameDetail(gameId: number | null, onClose: () => void) {
     priorityCanStart,
     priorityReason,
     nextSuggestion,
+    nextPipelineLineup,
+    canAddToPendingQueue,
+    pendingQueueLabel,
     showNextSuggestion,
     suggestedMatchId,
     handleTogglePriority,
     handleStartSuggested,
     handleCreateAndStartSuggested,
     handleQueueSuggested,
-    handleGenerateBatch,
     handleArrangePairMatch,
     showPairArrange,
     pairArrangeHint,

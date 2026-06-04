@@ -28,6 +28,7 @@ import {
   Moon,
   Undo2,
   Link2,
+  ListPlus,
 } from "lucide-react"
 import { UserAvatar } from "../user-avatar"
 import { Badge } from "@/components/ui/badge"
@@ -133,7 +134,6 @@ export function GameDetailView({ vm }: { vm: GameDetailViewModel }) {
     handleMatchFinished,
     startingMatchId,
     suggestActionLoading,
-    batchLoading,
     finishingMatchId,
     deletingMatchId,
     deletingAllPending,
@@ -150,6 +150,10 @@ export function GameDetailView({ vm }: { vm: GameDetailViewModel }) {
     handleDeletePlaceholder,
     openRatingSheet,
     handleRatePlayer,
+    handleToggleArrived,
+    matchmakingPlayers,
+    arrivedCount,
+    playerGenderLabel,
     canCreateMatch,
     canPlanMatches,
     totalMatchCount,
@@ -170,13 +174,15 @@ export function GameDetailView({ vm }: { vm: GameDetailViewModel }) {
     priorityCanStart,
     priorityReason,
     nextSuggestion,
+    nextPipelineLineup,
+    canAddToPendingQueue,
+    pendingQueueLabel,
     showNextSuggestion,
     suggestedMatchId,
     handleTogglePriority,
     handleStartSuggested,
     handleCreateAndStartSuggested,
     handleQueueSuggested,
-    handleGenerateBatch,
     handleArrangePairMatch,
     showPairArrange,
     pairArrangeHint,
@@ -464,9 +470,14 @@ export function GameDetailView({ vm }: { vm: GameDetailViewModel }) {
 
               <Card className={`p-4 rounded-2xl border-border/50 ${isGameTime ? "order-2" : "order-10"}`}>
                 <div className="flex items-center justify-between mb-3">
-                  <div className="flex items-center gap-2">
-                    <Users className="w-4 h-4 text-primary" />
+                  <div className="flex items-center gap-2 min-w-0 flex-wrap">
+                    <Users className="w-4 h-4 text-primary shrink-0" />
                     <span className="text-sm font-semibold">Người chơi</span>
+                    {playerGenderLabel && (
+                      <span className="text-[10px] text-muted-foreground font-normal">
+                        ({playerGenderLabel})
+                      </span>
+                    )}
                   </div>
                   <div className="flex items-center gap-2">
                     {canManage && game.invite_code && (
@@ -527,8 +538,16 @@ export function GameDetailView({ vm }: { vm: GameDetailViewModel }) {
                   />
                 )}
 
+                {canManage && game.status !== "finished" && game.status !== "cancelled" && (
+                  <p className="text-[10px] text-muted-foreground mb-2">
+                    Chạm người chơi để đánh dấu{" "}
+                    <span className="text-emerald-400 font-medium">đã đến sân</span>
+                    {` (${arrivedCount}/${game.players.length}). Chỉ người đã đến được tạo/xếp trận.`}
+                  </p>
+                )}
+
                 <div className="space-y-2">
-                  {sortedPlayers.map((player) => {
+                  {sortedPlayers.map((player, playerIndex) => {
                     const isThisHost = player.id === game.host?.id
                     const isThisCoHost = player.role === "co_host"
                     const isPlaceholder = !!player.placeholder
@@ -547,14 +566,41 @@ export function GameDetailView({ vm }: { vm: GameDetailViewModel }) {
                       ? game.players.find((p) => p.id === partnerId)?.name
                       : null
                     const isPairPickTarget = pairPick === player.id
+                    const arrived = !!player.arrived_at_court
+                    const canToggleArrived = canManage && gameActive
                     return (
                       <div
                         key={player.id}
+                        role={canToggleArrived ? "button" : undefined}
+                        tabIndex={canToggleArrived ? 0 : undefined}
+                        onClick={
+                          canToggleArrived
+                            ? () => void handleToggleArrived(player)
+                            : undefined
+                        }
+                        onKeyDown={
+                          canToggleArrived
+                            ? (e) => {
+                                if (e.key === "Enter" || e.key === " ") {
+                                  e.preventDefault()
+                                  void handleToggleArrived(player)
+                                }
+                              }
+                            : undefined
+                        }
                         className={cn(
-                          "flex items-center gap-3 rounded-lg px-1 -mx-1",
+                          "flex items-center gap-2 rounded-lg px-2 py-1 -mx-1 transition-colors",
                           isPairPickTarget && "ring-1 ring-primary/50 bg-primary/5",
+                          arrived && "bg-emerald-500/20 ring-1 ring-emerald-500/40",
+                          canToggleArrived &&
+                            !arrived &&
+                            "hover:bg-emerald-500/15 hover:ring-1 hover:ring-emerald-500/30",
+                          canToggleArrived && "cursor-pointer",
                         )}
                       >
+                        <span className="w-5 shrink-0 text-center text-xs font-semibold text-muted-foreground tabular-nums">
+                          {playerIndex + 1}
+                        </span>
                         <div className="relative flex-shrink-0">
                           <UserAvatar
                             name={player.name}
@@ -596,7 +642,10 @@ export function GameDetailView({ vm }: { vm: GameDetailViewModel }) {
                             {canManage && gameActive && (
                               <button
                                 type="button"
-                                onClick={() => openRatingSheet(player)}
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  openRatingSheet(player)
+                                }}
                                 className="p-0.5 rounded-full text-muted-foreground hover:text-primary hover:bg-primary/10 transition-colors"
                                 title="Đánh giá trình độ"
                               >
@@ -622,6 +671,11 @@ export function GameDetailView({ vm }: { vm: GameDetailViewModel }) {
                             {isPlaceholder && (
                               <Badge variant="outline" className="text-[10px] px-1.5 border-muted-foreground/40">
                                 Tạm
+                              </Badge>
+                            )}
+                            {arrived && (
+                              <Badge className="bg-emerald-600 text-white border border-emerald-400/50 text-[10px] px-1.5 font-semibold shadow-sm">
+                                Đã đến
                               </Badge>
                             )}
                             {stats != null && (
@@ -651,7 +705,10 @@ export function GameDetailView({ vm }: { vm: GameDetailViewModel }) {
                             onPlayerPairTap && (
                               <button
                                 type="button"
-                                onClick={() => onPlayerPairTap(player.id)}
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  onPlayerPairTap(player.id)
+                                }}
                                 className="p-1 rounded-full text-muted-foreground hover:text-primary hover:bg-primary/10 transition-colors"
                                 title="Ghép cặp"
                               >
@@ -659,7 +716,10 @@ export function GameDetailView({ vm }: { vm: GameDetailViewModel }) {
                               </button>
                             )}
                           {gameActive && (canPromoteThis || canKickThis || canEditPlaceholder || canEditGender) && (
-                            <div className="flex items-center gap-0.5 ml-1">
+                            <div
+                              className="flex items-center gap-0.5 ml-1"
+                              onClick={(e) => e.stopPropagation()}
+                            >
                               {canEditGender && (
                                 <button
                                   type="button"
@@ -808,8 +868,6 @@ export function GameDetailView({ vm }: { vm: GameDetailViewModel }) {
                               suggestion={showNextSuggestion ? nextSuggestion : null}
                               isGameTime={isGameTime}
                               loading={suggestActionLoading || startingMatchId != null}
-                              batchLoading={batchLoading}
-                              showBatchActions={pendingMatches.length <= 2}
                               showPairArrange={showPairArrange}
                               pairArrangeHint={pairArrangeHint}
                               pairArrangeDisabled={pairArrangeDisabled}
@@ -818,7 +876,6 @@ export function GameDetailView({ vm }: { vm: GameDetailViewModel }) {
                               onStart={handleStartSuggested}
                               onCreateAndStart={handleCreateAndStartSuggested}
                               onQueue={handleQueueSuggested}
-                              onGenerateBatch={() => void handleGenerateBatch(10)}
                             />
                           ) : null}
                         </div>
@@ -853,6 +910,66 @@ export function GameDetailView({ vm }: { vm: GameDetailViewModel }) {
                     </div>
                   )}
 
+                  {canManage &&
+                    matchTab === "queue" &&
+                    nextPipelineLineup &&
+                    canPlanMatches &&
+                    canAddToPendingQueue &&
+                    nextSuggestion?.kind !== "start" && (
+                    <div className="mx-4 mb-2 rounded-xl border border-primary/35 bg-primary/10 px-3 py-2.5">
+                      <p className="text-[11px] font-semibold text-primary uppercase tracking-wide">
+                        Trận xếp tiếp (gợi ý)
+                      </p>
+                      <p className="text-xs font-medium text-foreground mt-0.5 leading-snug">
+                        {nextPipelineLineup.label}
+                      </p>
+                      <p className="text-[10px] text-muted-foreground mt-0.5">
+                        {nextPipelineLineup.reason}
+                      </p>
+                      <Button
+                        size="sm"
+                        className="mt-2 w-full h-8 rounded-full bg-emerald-600 hover:bg-emerald-700 text-white text-xs"
+                        disabled={suggestActionLoading}
+                        onClick={() => void handleQueueSuggested()}
+                      >
+                        {suggestActionLoading ? (
+                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                        ) : (
+                          <>
+                            <ListPlus className="w-3.5 h-3.5 mr-1" />
+                            Thêm vào hàng chờ
+                          </>
+                        )}
+                      </Button>
+                    </div>
+                  )}
+
+                  {matchTab === "queue" && (
+                    <p
+                      className={cn(
+                        "text-[10px] px-4 pb-2 leading-snug",
+                        canAddToPendingQueue
+                          ? "text-muted-foreground"
+                          : "text-amber-600 dark:text-amber-500",
+                      )}
+                    >
+                      {pendingQueueLabel}
+                      {pendingMatches.length > 0 ? (
+                        <>
+                          {" "}
+                          · Thứ tự:{" "}
+                          {pendingMatches
+                            .map((m) =>
+                              m.priority ? `★#${m.match_number}` : `#${m.match_number}`,
+                            )
+                            .join(" → ")}
+                        </>
+                      ) : (
+                        " — chưa có trận chờ"
+                      )}
+                    </p>
+                  )}
+
                   {canManage && matchTab === "queue" && pendingMatches.length > 0 && (
                     <div className="px-4 pb-2 flex justify-end">
                       <Button
@@ -882,7 +999,7 @@ export function GameDetailView({ vm }: { vm: GameDetailViewModel }) {
                   >
                   {totalMatchCount === 0 ? (
                     <p className="text-xs text-muted-foreground text-center py-4">
-                      Chưa có trận đấu nào. Host có thể tạo trận mới hoặc xếp hàng loạt.
+                      Chưa có trận đấu nào. Host có thể tạo trận mới hoặc dùng gợi ý.
                     </p>
                   ) : showTabListLoading ? (
                     <div className="flex justify-center py-8">
@@ -895,7 +1012,7 @@ export function GameDetailView({ vm }: { vm: GameDetailViewModel }) {
                         : matchTab === "queue"
                           ? tabMatchCounts.pending > 0
                             ? "Đang tải hàng chờ…"
-                            : "Hàng chờ trống — dùng gợi ý hoặc Xếp 10 trận."
+                            : "Hàng chờ trống — dùng gợi ý trận tiếp theo."
                           : tabMatchCounts.finished > 0
                             ? "Đang tải trận đã xong…"
                             : "Chưa có trận đã kết thúc."}
@@ -1031,7 +1148,7 @@ export function GameDetailView({ vm }: { vm: GameDetailViewModel }) {
             }
           }}
           gameId={game.id}
-          players={game.players}
+          players={matchmakingPlayers}
           matches={game.matches || []}
           matchType={game.match_type}
           onCreated={handleMatchCreated}

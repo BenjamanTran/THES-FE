@@ -126,3 +126,20 @@ export function updatePlayerGender(
     body: JSON.stringify(params),
   })
 }
+
+export function togglePlayerArrived(gameId: number, userId: number, arrived: boolean) {
+  return request<{ player: GamePlayer }>(`/api/v1/games/${gameId}/players/${userId}/arrived`, {
+    method: "PATCH",
+    body: JSON.stringify({ arrived }),
+  })
+}
+
+export function adjustSessionPlayed(gameId: number, userId: number, delta: 1 | -1) {
+  return request<{ player: GamePlayer }>(
+    `/api/v1/games/${gameId}/players/${userId}/session_played`,
+    {
+      method: "PATCH",
+      body: JSON.stringify({ delta }),
+    },
+  )
+}
