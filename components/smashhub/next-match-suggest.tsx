@@ -16,7 +16,6 @@ interface NextMatchSuggestProps {
   /** Doubles: arrange match keeping pairs on each side (free players only) */
   showPairArrange?: boolean
   pairArrangeLabel?: string
-  pairArrangeHint?: string
   pairArrangeDisabled?: boolean
   onArrangePair?: () => void
   pairArrangeLoading?: boolean
@@ -31,7 +30,6 @@ export function NextMatchSuggest({
   onQueue,
   showPairArrange = false,
   pairArrangeLabel = "Sắp xếp cặp đấu",
-  pairArrangeHint,
   pairArrangeDisabled = false,
   onArrangePair,
   pairArrangeLoading = false,
@@ -42,7 +40,6 @@ export function NextMatchSuggest({
       <div className="rounded-xl border border-border/40 bg-secondary/20 px-3 py-2.5 mb-2 space-y-2 transition-colors duration-300">
         <PairArrangeBlock
           label={pairArrangeLabel}
-          hint={pairArrangeHint}
           disabled={pairArrangeDisabled}
           loading={pairArrangeLoading || loading}
           onArrangePair={onArrangePair}
@@ -156,7 +153,6 @@ export function NextMatchSuggest({
         <div className="mt-2 pl-6">
           <PairArrangeBlock
             label={pairArrangeLabel}
-            hint={pairArrangeHint}
             disabled={pairArrangeDisabled}
             loading={pairArrangeLoading || loading}
             onArrangePair={onArrangePair}
@@ -167,15 +163,13 @@ export function NextMatchSuggest({
   )
 }
 
-function PairArrangeBlock({
+export function PairArrangeBlock({
   label,
-  hint,
   disabled,
   loading,
   onArrangePair,
 }: {
   label: string
-  hint?: string
   disabled?: boolean
   loading?: boolean
   onArrangePair: () => void
@@ -185,7 +179,12 @@ function PairArrangeBlock({
       <Button
         size="sm"
         variant="outline"
-        className="w-full h-8 rounded-full text-[11px] font-medium border-primary/40 text-primary"
+        className={cn(
+          "w-full h-8 rounded-full text-[11px] font-medium",
+          disabled
+            ? "border-amber-500/50 bg-amber-500/5 text-amber-700 dark:text-amber-400 opacity-100 cursor-not-allowed"
+            : "border-primary/40 text-primary",
+        )}
         disabled={disabled || loading}
         onClick={onArrangePair}
       >
@@ -198,13 +197,6 @@ function PairArrangeBlock({
           </>
         )}
       </Button>
-      {hint ? (
-        <p
-          className={`text-[10px] mt-1 leading-snug ${disabled ? "text-amber-500/90" : "text-muted-foreground"}`}
-        >
-          {hint}
-        </p>
-      ) : null}
     </div>
   )
 }

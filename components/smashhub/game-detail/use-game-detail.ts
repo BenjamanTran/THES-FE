@@ -59,12 +59,7 @@ import {
   getQueueLineupFromSuggestion,
   suggestPipelineQueueLineup,
 } from "@/lib/suggest-next-match"
-import { PAIR_ARRANGE_MAX_SPREAD, sessionPlayedSpread } from "@/lib/match-stats"
-import {
-  canArrangePairMatch,
-  pairsFromGame,
-  suggestPairDoublesMatch,
-} from "@/lib/player-pairs"
+import { suggestPairDoublesMatch } from "@/lib/player-pairs"
 import { useGameCable } from "@/hooks/use-game-cable"
 import type { GameCableEvent } from "@/lib/game-cable"
 import { reverseGeocode } from "@/lib/geocode"
@@ -1107,26 +1102,8 @@ export function useGameDetail(gameId: number | null, onClose: () => void) {
     return suggestPairDoublesMatch(game, matchmakingPlayers, game.matches ?? [])
   }, [game, canPlanMatches, matchmakingPlayers])
 
-  const pairSessionSpread = useMemo(() => {
-    if (!game?.players?.length) return 0
-    return sessionPlayedSpread(game.players, game.matches)
-  }, [game?.players, game?.matches])
-
   const showPairArrange =
-    !!game &&
-    game.match_type === "doubles" &&
-    canPlanMatches &&
-    canManage &&
-    canArrangePairMatch(game) &&
-    pairsFromGame(game.player_pairs).length > 0 &&
-    pairSessionSpread < PAIR_ARRANGE_MAX_SPREAD
-
-  const pairArrangeHint =
-    pairMatchPlan && "error" in pairMatchPlan
-      ? pairMatchPlan.error
-      : pairMatchPlan && "label" in pairMatchPlan
-        ? pairMatchPlan.reason
-        : undefined
+    !!game && game.match_type === "doubles" && canPlanMatches && canManage
 
   const pairArrangeDisabled =
     !pairMatchPlan || ("error" in pairMatchPlan && !!pairMatchPlan.error)
@@ -1223,7 +1200,7 @@ export function useGameDetail(gameId: number | null, onClose: () => void) {
 
   const handleArrangePairMatch = async () => {
     if (!game) return
-    const plan = suggestPairDoublesMatch(game, matchmakingPlayers, game.matches ?? [])
+    const plan = pairMatchPlan ?? suggestPairDoublesMatch(game, matchmakingPlayers, game.matches ?? [])
     if ("error" in plan) {
       toast.error(plan.error)
       return
@@ -1406,7 +1383,6 @@ export function useGameDetail(gameId: number | null, onClose: () => void) {
     handleQueueSuggested,
     handleArrangePairMatch,
     showPairArrange,
-    pairArrangeHint,
     pairArrangeDisabled,
     pairArrangeLoading,
     togglingPriorityId,

@@ -20,6 +20,7 @@ import {
   type GameDetail,
   type GamePlayer,
 } from "@/lib/api"
+import { PairArrangeBlock } from "@/components/smashhub/next-match-suggest"
 import {
   canArrangePairMatch,
   pairLabel,
@@ -35,6 +36,10 @@ interface GamePlayerPairsProps {
   pairPick: number | null
   pairLoading?: boolean
   onUpdated: () => void
+  showPairArrange?: boolean
+  pairArrangeDisabled?: boolean
+  pairArrangeLoading?: boolean
+  onArrangePair?: () => void
 }
 
 type LimitMode = "unlimited" | "limited"
@@ -50,6 +55,10 @@ export function GamePlayerPairs({
   pairPick,
   pairLoading,
   onUpdated,
+  showPairArrange = false,
+  pairArrangeDisabled = false,
+  pairArrangeLoading = false,
+  onArrangePair,
 }: GamePlayerPairsProps) {
   const [loading, setLoading] = useState(false)
   const [limitSaving, setLimitSaving] = useState(false)
@@ -202,11 +211,24 @@ export function GamePlayerPairs({
         </p>
       )}
 
+      {showPairArrange && onArrangePair ? (
+        <div className="mt-2">
+          <PairArrangeBlock
+            label="Sắp xếp cặp đấu"
+            disabled={pairArrangeDisabled}
+            loading={pairArrangeLoading || loading || pairLoading}
+            onArrangePair={onArrangePair}
+          />
+        </div>
+      ) : null}
+
       {canManage && gameActive && (
-        <p className="text-[10px] text-muted-foreground">
+        <p className="text-[10px] text-muted-foreground mt-2">
           {pairPick != null
             ? "Chọn người thứ hai để ghép cặp (bấm lại để hủy)."
-            : "Gợi ý trận thường vẫn có thể tách cặp. Dùng nút «Sắp xếp cặp đấu» khi muốn giữ cặp cùng phe."}
+            : pairs.length > 0
+              ? "Gợi ý trận thường vẫn có thể tách cặp."
+              : "Chọn hai người trong danh sách bên dưới để ghép cặp."}
           {(loading || pairLoading) && (
             <Loader2 className="inline w-3 h-3 ml-1 animate-spin" />
           )}

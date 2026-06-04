@@ -28,7 +28,6 @@ import {
   Moon,
   Undo2,
   Link2,
-  ListPlus,
 } from "lucide-react"
 import { UserAvatar } from "../user-avatar"
 import { Badge } from "@/components/ui/badge"
@@ -174,7 +173,6 @@ export function GameDetailView({ vm }: { vm: GameDetailViewModel }) {
     priorityCanStart,
     priorityReason,
     nextSuggestion,
-    nextPipelineLineup,
     canAddToPendingQueue,
     pendingQueueLabel,
     showNextSuggestion,
@@ -185,7 +183,6 @@ export function GameDetailView({ vm }: { vm: GameDetailViewModel }) {
     handleQueueSuggested,
     handleArrangePairMatch,
     showPairArrange,
-    pairArrangeHint,
     pairArrangeDisabled,
     pairArrangeLoading,
     togglingPriorityId,
@@ -534,6 +531,10 @@ export function GameDetailView({ vm }: { vm: GameDetailViewModel }) {
                     pairPick={pairPick}
                     pairLoading={pairTapLoading}
                     onUpdated={reloadGame}
+                    showPairArrange={showPairArrange}
+                    pairArrangeDisabled={pairArrangeDisabled}
+                    pairArrangeLoading={pairArrangeLoading}
+                    onArrangePair={() => void handleArrangePairMatch()}
                   />
                 )}
 
@@ -867,7 +868,6 @@ export function GameDetailView({ vm }: { vm: GameDetailViewModel }) {
                               isGameTime={isGameTime}
                               loading={suggestActionLoading || startingMatchId != null}
                               showPairArrange={showPairArrange}
-                              pairArrangeHint={pairArrangeHint}
                               pairArrangeDisabled={pairArrangeDisabled}
                               pairArrangeLoading={pairArrangeLoading}
                               onArrangePair={() => void handleArrangePairMatch()}
@@ -905,40 +905,6 @@ export function GameDetailView({ vm }: { vm: GameDetailViewModel }) {
                           {tab.count > 0 ? ` (${tab.count})` : ""}
                         </button>
                       ))}
-                    </div>
-                  )}
-
-                  {canManage &&
-                    matchTab === "queue" &&
-                    nextPipelineLineup &&
-                    canPlanMatches &&
-                    canAddToPendingQueue &&
-                    nextSuggestion?.kind !== "start" && (
-                    <div className="mx-4 mb-2 rounded-xl border border-primary/35 bg-primary/10 px-3 py-2.5">
-                      <p className="text-[11px] font-semibold text-primary uppercase tracking-wide">
-                        Trận xếp tiếp (gợi ý)
-                      </p>
-                      <p className="text-xs font-medium text-foreground mt-0.5 leading-snug">
-                        {nextPipelineLineup.label}
-                      </p>
-                      <p className="text-[10px] text-muted-foreground mt-0.5">
-                        {nextPipelineLineup.reason}
-                      </p>
-                      <Button
-                        size="sm"
-                        className="mt-2 w-full h-8 rounded-full bg-emerald-600 hover:bg-emerald-700 text-white text-xs"
-                        disabled={suggestActionLoading}
-                        onClick={() => void handleQueueSuggested()}
-                      >
-                        {suggestActionLoading ? (
-                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                        ) : (
-                          <>
-                            <ListPlus className="w-3.5 h-3.5 mr-1" />
-                            Thêm vào hàng chờ
-                          </>
-                        )}
-                      </Button>
                     </div>
                   )}
 
