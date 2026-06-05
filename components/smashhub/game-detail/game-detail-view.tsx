@@ -1,5 +1,6 @@
 "use client"
 
+import { useState } from "react"
 import {
   ArrowLeft,
   Calendar,
@@ -12,7 +13,6 @@ import {
   Loader2,
   Crown,
   FileText,
-  Wallet,
   Plus,
   Scale,
   Trash2,
@@ -28,6 +28,7 @@ import {
   Moon,
   Undo2,
   Link2,
+  Wallet,
 } from "lucide-react"
 import { UserAvatar } from "../user-avatar"
 import { Badge } from "@/components/ui/badge"
@@ -46,11 +47,11 @@ import { PlaceholderPlayerSheet } from "../placeholder-player-sheet"
 import { PlayerGenderSheet } from "../player-gender-sheet"
 import { ScoreEntryModal } from "../score-entry-modal"
 import { useAppTheme } from "@/lib/theme-provider"
-import { formatPriceRange } from "@/lib/format"
 import { cn } from "@/lib/utils"
 import { format } from "date-fns"
 import { vi } from "date-fns/locale"
 import { ratingToStars } from "@/lib/rating-stars"
+import { formatPriceRange } from "@/lib/format"
 import { generateFbPost, statusMeta } from "./meta"
 import { MAX_CO_HOSTS } from "@/components/smashhub/game-detail/constants"
 import type { GameDetailViewModel } from "@/components/smashhub/game-detail/use-game-detail"
@@ -415,20 +416,22 @@ export function GameDetailView({ vm }: { vm: GameDetailViewModel }) {
                 </div>
               </Card>
 
-              <Card className="order-10 p-4 rounded-2xl border-border/50">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <Wallet className="w-4 h-4 text-primary" />
-                    <span className="text-sm font-semibold">Giá / slot</span>
+              {((game.min_price ?? 0) > 0 || (game.max_price ?? 0) > 0) && (
+                <Card className="order-10 p-4 rounded-2xl border-border/50">
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-2">
+                      <Wallet className="w-4 h-4 text-primary" />
+                      <span className="text-sm font-semibold">Giá / slot</span>
+                    </div>
+                    <span className="text-sm font-bold">
+                      {formatPriceRange(game.min_price ?? 0, game.max_price ?? 0)}
+                    </span>
                   </div>
-                  <span className="text-sm font-bold text-foreground">
-                    {formatPriceRange(game.min_price ?? 0, game.max_price ?? 0)}
-                  </span>
-                </div>
-                <p className="text-[10px] text-muted-foreground mt-1">
-                  Cho toàn bộ thời gian chơi
-                </p>
-              </Card>
+                  <p className="text-[10px] text-muted-foreground mt-1">
+                    Cho toàn bộ thời gian chơi · tính tiền tại Trận của tôi
+                  </p>
+                </Card>
+              )}
 
               {canManage && game.invite_code && (
                 <Card className="order-10 p-3 rounded-2xl border-blue-500/20 bg-blue-500/5">
@@ -1158,6 +1161,7 @@ export function GameDetailView({ vm }: { vm: GameDetailViewModel }) {
         rateSaving={rateSaving}
         onSave={handleRatePlayer}
       />
+
     </Dialog>
   )
 }

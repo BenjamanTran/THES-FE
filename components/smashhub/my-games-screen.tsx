@@ -20,6 +20,8 @@ import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { SkillBadge } from "./skill-badge"
+import { GameSettlementSheet } from "./settlement/game-settlement-sheet"
+import { MyGamesSettlementTab } from "./settlement/my-games-settlement-tab"
 import { fetchMyGames, type Game } from "@/lib/api"
 import { useAuth } from "@/lib/auth-context"
 import { formatPriceRange } from "@/lib/format"
@@ -32,6 +34,7 @@ interface MyGamesScreenProps {
 }
 
 type TimeTab = "upcoming" | "past"
+type SectionTab = "list" | "settlement"
 type RoleFilter = "all" | "host" | "joined"
 
 const PER_PAGE = 15
@@ -81,7 +84,9 @@ export function MyGamesScreen({ onCreateMatch, onOpenGame }: MyGamesScreenProps)
   const { user } = useAuth()
   const userId = user?.id ?? -1
   const [timeTab, setTimeTab] = useState<TimeTab>("upcoming")
+  const [sectionTab, setSectionTab] = useState<SectionTab>("list")
   const [roleFilter, setRoleFilter] = useState<RoleFilter>("all")
+  const [settlementGameId, setSettlementGameId] = useState<number | null>(null)
   const [games, setGames] = useState<Game[]>([])
   const [page, setPage] = useState(1)
   const [total, setTotal] = useState<number | null>(null)
@@ -210,7 +215,25 @@ export function MyGamesScreen({ onCreateMatch, onOpenGame }: MyGamesScreenProps)
           </Button>
         </div>
 
-        <Tabs value={timeTab} onValueChange={(v) => setTimeTab(v as TimeTab)}>
+        <Tabs value={sectionTab} onValueChange={(v) => setSectionTab(v as SectionTab)}>
+          <TabsList className="w-full grid grid-cols-2 h-9 bg-secondary/50">
+            <TabsTrigger
+              value="list"
+              className="h-7 text-xs data-[state=active]:bg-primary data-[state=active]:text-primary-foreground"
+            >
+              Danh sách trận
+            </TabsTrigger>
+            <TabsTrigger
+              value="settlement"
+              className="h-7 text-xs data-[state=active]:bg-primary data-[state=active]:text-primary-foreground"
+            >
+              <Wallet className="w-3 h-3 mr-1" />
+              Tính tiền
+            </TabsTrigger>
+          </TabsList>
+        </Tabs>
+
+        <Tabs value={timeTab} onValueChange={(v) => setTimeTab(v as TimeTab)} className="mt-3">
           <TabsList className="w-full grid grid-cols-2 h-9 bg-secondary/50">
             <TabsTrigger
               value="upcoming"
@@ -227,6 +250,7 @@ export function MyGamesScreen({ onCreateMatch, onOpenGame }: MyGamesScreenProps)
           </TabsList>
         </Tabs>
 
+        {sectionTab === "list" && (
         <div className="flex gap-2 mt-3 overflow-x-auto pb-1">
           {(
             [
@@ -245,10 +269,36 @@ export function MyGamesScreen({ onCreateMatch, onOpenGame }: MyGamesScreenProps)
             </Badge>
           ))}
         </div>
+        )}
       </header>
 
       <div className="flex-1 overflow-y-auto px-4 pt-4 pb-24">
-        {loading ? (
+        {sectionTab === "settlement" ? (
+          loading ? (
+            <div className="space-y-3 animate-skeleton">
+              <div className="h-24 rounded-2xl bg-muted/30" />
+              <div className="h-24 rounded-2xl bg-muted/30" />
+            </div>
+          ) : error ? (
+            <div className="text-center py-12">
+              <p className="text-sm text-destructive mb-3">{error}</p>
+              <Button
+                size="sm"
+                variant="outline"
+                className="rounded-full"
+                onClick={() => loadPage(1, "replace")}
+              >
+                Thử lại
+              </Button>
+            </div>
+          ) : (
+            <MyGamesSettlementTab
+              games={games}
+              userId={userId}
+              onOpenSettlement={setSettlementGameId}
+            />
+          )
+        ) : loading ? (
           <div className="space-y-3 animate-skeleton">
             <div className="h-28 rounded-2xl bg-muted/30" />
             <div className="h-28 rounded-2xl bg-muted/30" />
@@ -360,17 +410,19 @@ export function MyGamesScreen({ onCreateMatch, onOpenGame }: MyGamesScreenProps)
                           {game.players_count}/{game.max_players}
                         </span>
                       </div>
-                      <Button
-                        size="sm"
-                        className="rounded-full text-xs h-8 px-3"
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          onOpenGame?.(game.id)
-                        }}
-                      >
-                        Chi tiết
-                        <ChevronRight className="w-3 h-3 ml-0.5" />
-                      </Button>
+                      <div className="flex flex-col gap-1">
+                        <Button
+                          size="sm"
+                          className="rounded-full text-xs h-8 px-3"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            onOpenGame?.(game.id)
+                          }}
+                        >
+                          Chi tiết
+                          <ChevronRight className="w-3 h-3 ml-0.5" />
+                        </Button>
+                      </div>
                     </div>
                   </div>
                 </Card>
@@ -406,6 +458,14 @@ export function MyGamesScreen({ onCreateMatch, onOpenGame }: MyGamesScreenProps)
           </div>
         )}
       </div>
+
+      <GameSettlementSheet
+        open={settlementGameId !== null}
+        onOpenChange={(open) => {
+          if (!open) setSettlementGameId(null)
+        }}
+        gameId={settlementGameId}
+      />
     </div>
   )
 }

@@ -17,6 +17,7 @@ import {
   Sun,
   Moon,
   Users,
+  Wallet,
 } from "lucide-react"
 import { format } from "date-fns"
 import { vi } from "date-fns/locale"
@@ -32,6 +33,7 @@ import { GameRatingSheet } from "./game-rating-sheet"
 import { useAppTheme } from "@/lib/theme-provider"
 import { cn } from "@/lib/utils"
 import type { GamePlayer, Gender } from "@/lib/api"
+import { formatPriceRange } from "@/lib/format"
 import { statusMeta } from "./meta"
 import type { GameDetailSimpleViewModel } from "./use-game-detail-simple"
 
@@ -62,6 +64,7 @@ export function GameDetailSimpleView({ vm }: { vm: GameDetailSimpleViewModel }) 
     open,
     loadGame,
     isHost,
+    isParticipant,
     canManage,
     handleKick,
     gameActive,
@@ -210,6 +213,23 @@ export function GameDetailSimpleView({ vm }: { vm: GameDetailSimpleViewModel }) 
                   </div>
                 )}
               </Card>
+
+              {((game.min_price ?? 0) > 0 || (game.max_price ?? 0) > 0) && (
+                <Card className="p-4 rounded-2xl border-border/50">
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-2">
+                      <Wallet className="w-4 h-4 text-primary" />
+                      <span className="text-sm font-semibold">Giá / slot</span>
+                    </div>
+                    <span className="text-sm font-bold">
+                      {formatPriceRange(game.min_price ?? 0, game.max_price ?? 0)}
+                    </span>
+                  </div>
+                  <p className="text-[10px] text-muted-foreground mt-1">
+                    Cho toàn bộ thời gian chơi · tính tiền tại Trận của tôi
+                  </p>
+                </Card>
+              )}
 
               {warning && (
                 <p className="text-xs text-amber-400 bg-amber-500/10 rounded-xl px-3 py-2">{warning}</p>
