@@ -24,6 +24,18 @@ export const SKILL_LABELS: Record<SkillLevel, string> = {
   professional: "Chuyên nghiệp",
 }
 
+/** Inline player row: icon + short code (e.g. Y+). */
+export const SKILL_SHORT_LABELS: Record<SkillLevel, string> = {
+  newbie: "N",
+  beginner_plus: "Y+",
+  lower_intermediate: "TBY",
+  intermediate: "TB−",
+  upper_intermediate: "TB+",
+  advanced: "K",
+  semi_pro: "BC",
+  professional: "CN",
+}
+
 interface SkillBadgeProps {
   level: string | null | undefined
   size?: "xs" | "sm" | "md"
@@ -59,7 +71,13 @@ export function SkillBadge({ level, size = "md", showIcon = true, compact = fals
   const isUnranked = !level
   const colors = isUnranked ? UNRANKED_COLORS : (skillColors[level] || skillColors["newbie"])
   const icon = isUnranked ? "—" : (SKILL_ICONS[level] || "🏸")
-  const label = isUnranked ? "Unranked" : (SKILL_LABELS[level as SkillLevel] || level)
+  const label = isUnranked
+    ? compact
+      ? "—"
+      : "Unranked"
+    : compact
+      ? (SKILL_SHORT_LABELS[level as SkillLevel] || level)
+      : (SKILL_LABELS[level as SkillLevel] || level)
   
   const sizeClasses = {
     xs: "text-[10px] px-1.5 py-0 h-5",

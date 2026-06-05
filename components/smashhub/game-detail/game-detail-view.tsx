@@ -57,6 +57,7 @@ import type { GameDetailViewModel } from "@/components/smashhub/game-detail/use-
 import { GameEditSettingsSheet } from "@/components/smashhub/game-detail/game-edit-settings-sheet"
 import { GameRatingSheet } from "@/components/smashhub/game-detail/game-rating-sheet"
 import { GamePlayerPairs } from "@/components/smashhub/game-detail/game-player-pairs"
+import { PlayerRowActionsMenu, type PlayerRowAction } from "@/components/smashhub/game-detail/player-row-actions-menu"
 import { partnerIdFor, pairsFromGame } from "@/lib/player-pairs"
 
 export type { GameDetailViewModel }
@@ -568,6 +569,70 @@ export function GameDetailView({ vm }: { vm: GameDetailViewModel }) {
                     const isPairPickTarget = pairPick === player.id
                     const arrived = !!player.arrived_at_court
                     const canToggleArrived = canManage && gameActive
+                    const rowActions: PlayerRowAction[] = []
+                    if (
+                      gameActive &&
+                      canManage &&
+                      game.match_type === "doubles" &&
+                      !partnerId &&
+                      onPlayerPairTap
+                    ) {
+                      rowActions.push({
+                        id: "pair",
+                        label: "Ghép cặp",
+                        icon: Link2,
+                        onClick: () => onPlayerPairTap(player.id),
+                      })
+                    }
+                    if (canManage && gameActive) {
+                      rowActions.push({
+                        id: "rate",
+                        label: "Đánh giá trình độ",
+                        icon: Pencil,
+                        onClick: () => openRatingSheet(player),
+                      })
+                    }
+                    if (canEditGender) {
+                      rowActions.push({
+                        id: "gender",
+                        label: "Sửa giới tính",
+                        icon: Users,
+                        onClick: () => openEditPlayerGender(player),
+                      })
+                    }
+                    if (canEditPlaceholder) {
+                      rowActions.push({
+                        id: "edit-placeholder",
+                        label: "Sửa thông tin",
+                        icon: Pencil,
+                        onClick: () => openEditPlaceholder(player),
+                      })
+                      rowActions.push({
+                        id: "delete-placeholder",
+                        label: "Xóa người tạm",
+                        icon: Trash2,
+                        variant: "destructive",
+                        onClick: () => handleDeletePlaceholder(player.id, player.name),
+                      })
+                    }
+                    if (canPromoteThis) {
+                      rowActions.push({
+                        id: "cohost",
+                        label: isThisCoHost ? "Gỡ co-host" : "Chỉ định co-host",
+                        icon: Shield,
+                        variant: isThisCoHost ? "primary" : "default",
+                        onClick: () => handlePromote(player.id),
+                      })
+                    }
+                    if (canKickThis) {
+                      rowActions.push({
+                        id: "kick",
+                        label: "Kick khỏi trận",
+                        icon: UserMinus,
+                        variant: "destructive",
+                        onClick: () => handleKick(player.id, player.name),
+                      })
+                    }
                     return (
                       <div
                         key={player.id}
@@ -638,19 +703,6 @@ export function GameDetailView({ vm }: { vm: GameDetailViewModel }) {
                                 </span>
                               )
                             })()}
-                            {canManage && gameActive && (
-                              <button
-                                type="button"
-                                onClick={(e) => {
-                                  e.stopPropagation()
-                                  openRatingSheet(player)
-                                }}
-                                className="p-0.5 rounded-full text-muted-foreground hover:text-primary hover:bg-primary/10 transition-colors"
-                                title="Đánh giá trình độ"
-                              >
-                                <Pencil className="w-3 h-3" />
-                              </button>
-                            )}
                           </div>
                         </div>
                         <div className="flex items-center gap-1 flex-shrink-0">
@@ -697,82 +749,9 @@ export function GameDetailView({ vm }: { vm: GameDetailViewModel }) {
                               </span>
                             )}
                           </div>
-                          {gameActive &&
-                            canManage &&
-                            game.match_type === "doubles" &&
-                            !partnerId &&
-                            onPlayerPairTap && (
-                              <button
-                                type="button"
-                                onClick={(e) => {
-                                  e.stopPropagation()
-                                  onPlayerPairTap(player.id)
-                                }}
-                                className="p-1 rounded-full text-muted-foreground hover:text-primary hover:bg-primary/10 transition-colors"
-                                title="Ghép cặp"
-                              >
-                                <Link2 className="w-3.5 h-3.5" />
-                              </button>
-                            )}
-                          {gameActive && (canPromoteThis || canKickThis || canEditPlaceholder || canEditGender) && (
-                            <div
-                              className="flex items-center gap-0.5 ml-1"
-                              onClick={(e) => e.stopPropagation()}
-                            >
-                              {canEditGender && (
-                                <button
-                                  type="button"
-                                  onClick={() => openEditPlayerGender(player)}
-                                  className="p-1 rounded-full text-muted-foreground hover:text-primary hover:bg-primary/10 transition-colors"
-                                  title="Sửa giới tính"
-                                >
-                                  <Users className="w-3.5 h-3.5" />
-                                </button>
-                              )}
-                              {canEditPlaceholder && (
-                                <>
-                                  <button
-                                    type="button"
-                                    onClick={() => openEditPlaceholder(player)}
-                                    className="p-1 rounded-full text-muted-foreground hover:text-primary hover:bg-primary/10 transition-colors"
-                                    title="Sửa thông tin"
-                                  >
-                                    <Pencil className="w-3.5 h-3.5" />
-                                  </button>
-                                  <button
-                                    type="button"
-                                    onClick={() => handleDeletePlaceholder(player.id, player.name)}
-                                    className="p-1 rounded-full text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
-                                    title="Xóa người tạm"
-                                  >
-                                    <Trash2 className="w-3.5 h-3.5" />
-                                  </button>
-                                </>
-                              )}
-                              {canPromoteThis && (
-                                <button
-                                  type="button"
-                                  onClick={() => handlePromote(player.id)}
-                                  className={`p-1 rounded-full transition-colors ${
-                                    isThisCoHost
-                                      ? "text-blue-400 hover:bg-blue-500/20"
-                                      : "text-muted-foreground hover:text-blue-400 hover:bg-blue-500/10"
-                                  }`}
-                                  title={isThisCoHost ? "Gỡ co-host" : "Chỉ định co-host"}
-                                >
-                                  <Shield className="w-3.5 h-3.5" />
-                                </button>
-                              )}
-                              {canKickThis && (
-                                <button
-                                  type="button"
-                                  onClick={() => handleKick(player.id, player.name)}
-                                  className="p-1 rounded-full text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
-                                  title="Kick"
-                                >
-                                  <UserMinus className="w-3.5 h-3.5" />
-                                </button>
-                              )}
+                          {rowActions.length > 0 && (
+                            <div onClick={(e) => e.stopPropagation()}>
+                              <PlayerRowActionsMenu actions={rowActions} />
                             </div>
                           )}
                         </div>
