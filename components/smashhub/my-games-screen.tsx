@@ -36,6 +36,22 @@ type RoleFilter = "all" | "host" | "joined"
 
 const PER_PAGE = 15
 
+const ACTIVE_STATUS_ORDER: Record<Game["status"], number> = {
+  ongoing: 0,
+  open: 1,
+  full: 2,
+  finished: 3,
+  cancelled: 4,
+}
+
+function sortUpcomingGames(games: Game[]): Game[] {
+  return [...games].sort((a, b) => {
+    const statusDiff = ACTIVE_STATUS_ORDER[a.status] - ACTIVE_STATUS_ORDER[b.status]
+    if (statusDiff !== 0) return statusDiff
+    return new Date(a.start_time).getTime() - new Date(b.start_time).getTime()
+  })
+}
+
 function statusMeta(status: Game["status"]) {
   switch (status) {
     case "open":
@@ -148,10 +164,12 @@ export function MyGamesScreen({ onCreateMatch, onOpenGame }: MyGamesScreenProps)
   }
 
   const filteredGames = useMemo(() => {
-    if (roleFilter === "all") return games
-    if (roleFilter === "host") return games.filter((g) => g.host?.id === userId)
-    return games.filter((g) => g.host?.id !== userId)
-  }, [games, roleFilter, userId])
+    const base =
+      timeTab === "upcoming" ? sortUpcomingGames(games) : games
+    if (roleFilter === "all") return base
+    if (roleFilter === "host") return base.filter((g) => g.host?.id === userId)
+    return base.filter((g) => g.host?.id !== userId)
+  }, [games, roleFilter, userId, timeTab])
 
   const hasMore = totalPages !== null && page < totalPages
   const loadMore = () => {
