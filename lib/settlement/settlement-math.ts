@@ -1,4 +1,10 @@
 import type { GamePlayer, Gender } from "@/lib/api"
+import type { ShuttleSettings } from "./shuttle-expense"
+import {
+  applyShuttleToLine,
+  DEFAULT_SHUTTLE_SETTINGS,
+  isShuttleLine,
+} from "./shuttle-expense"
 
 export const GENDER_STEP_VND = 1_000
 /** Làm tròn chia tiền lên bội 500đ — tổng thu có thể cao hơn chi. */
@@ -12,6 +18,8 @@ export function ceilShareAmount(raw: number): number {
 export type SettlementMode = "split_evenly" | "fixed_price"
 export type SettlementStatus = "none" | "draft" | "published"
 
+export type ExpenseLineKind = "generic" | "shuttle"
+
 export interface ExpenseLine {
   id: string
   label: string
@@ -21,6 +29,11 @@ export interface ExpenseLine {
   unit_vnd: number
   /** Bật = cộng vào tổng chi / chia tiền. Mặc định true. */
   included: boolean
+  kind?: ExpenseLineKind
+  /** Giá 1 ống cầu (VND) — chỉ dòng kind=shuttle. */
+  shuttle_tube_vnd?: number
+  /** Số quả / ống — chỉ dòng kind=shuttle. */
+  shuttle_per_tube?: number
 }
 
 export function expenseLineAmount(quantity: number, unitVnd: number): number {
@@ -53,7 +66,14 @@ export function normalizeExpenseLine(raw: Partial<ExpenseLine> & Record<string, 
     unit_vnd: 0,
     amount: 0,
     included: true,
-  }, { quantity, unit_vnd, included: raw.included })
+    kind: raw.kind === "shuttle" || /^cầu/i.test(lineLabel) ? "shuttle" : "generic",
+    shuttle_tube_vnd: Number(raw.shuttle_tube_vnd ?? DEFAULT_SHUTTLE_SETTINGS.tube_vnd),
+    shuttle_per_tube: Number(raw.shuttle_per_tube ?? DEFAULT_SHUTTLE_SETTINGS.per_tube),
+  }, {
+    quantity,
+    unit_vnd,
+    included: raw.included,
+  })
 }
 
 export interface SettlementPlayerInput {
@@ -93,6 +113,8 @@ export interface SettlementDraft {
   gender_adjustment_steps: number
   fixed_male_price: number
   fixed_female_price: number
+  /** Cài đặt ống cầu mặc định cho dòng Cầu. */
+  shuttle_settings?: ShuttleSettings
 }
 
 export const EXPENSE_PRESETS = ["Sân", "Cầu", "Nước", "Gửi xe"] as const
@@ -103,9 +125,22 @@ export function newExpenseLine(label = ""): ExpenseLine {
 
 export function applyExpenseLinePatch(line: ExpenseLine, patch: Partial<ExpenseLine>): ExpenseLine {
   const next = { ...line, ...patch }
+  const included = next.included !== false
+
+  if (isShuttleLine(next)) {
+    const settings: ShuttleSettings = {
+      name: (patch.label ?? next.label).trim() || DEFAULT_SHUTTLE_SETTINGS.name,
+      tube_vnd: next.shuttle_tube_vnd ?? DEFAULT_SHUTTLE_SETTINGS.tube_vnd,
+      per_tube: next.shuttle_per_tube ?? DEFAULT_SHUTTLE_SETTINGS.per_tube,
+    }
+    return applyShuttleToLine(
+      { ...next, quantity: Math.max(0, Math.floor(next.quantity ?? 0)) },
+      settings,
+    )
+  }
+
   const quantity = Math.max(0, Math.floor(next.quantity ?? 0))
   const unit_vnd = Math.max(0, next.unit_vnd ?? 0)
-  const included = next.included !== false
   return {
     id: next.id,
     label: next.label,
@@ -113,6 +148,7 @@ export function applyExpenseLinePatch(line: ExpenseLine, patch: Partial<ExpenseL
     unit_vnd,
     amount: expenseLineAmount(quantity, unit_vnd),
     included,
+    kind: "generic",
   }
 }
 

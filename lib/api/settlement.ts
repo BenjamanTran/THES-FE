@@ -1,5 +1,6 @@
 import { request } from "./client"
 import type { ExpenseLine, SettlementComputed, SettlementMode } from "@/lib/settlement/settlement-math"
+import type { ShuttleSettings } from "@/lib/settlement/shuttle-expense"
 
 export interface GameSettlementRecord {
   mode: SettlementMode
@@ -8,6 +9,7 @@ export interface GameSettlementRecord {
   gender_adjustment_steps: number
   fixed_male_price: number
   fixed_female_price: number
+  shuttle_settings?: ShuttleSettings | null
   published_at: string | null
   updated_at: string
 }
@@ -27,6 +29,7 @@ export interface UpsertSettlementParams {
   gender_adjustment_steps: number
   fixed_male_price: number
   fixed_female_price: number
+  shuttle_settings?: ShuttleSettings
 }
 
 export function fetchGameSettlement(gameId: number) {

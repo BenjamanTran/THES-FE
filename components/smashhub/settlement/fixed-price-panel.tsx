@@ -25,8 +25,8 @@ export function FixedPricePanel({
   return (
     <div className="space-y-4">
       <ExpenseLinesEditor
-        lines={draft.expense_lines}
-        onChange={(expense_lines) => onDraftChange({ ...draft, expense_lines })}
+        draft={draft}
+        onDraftChange={onDraftChange}
         disabled={disabled}
         total={expenseTotal}
       />
