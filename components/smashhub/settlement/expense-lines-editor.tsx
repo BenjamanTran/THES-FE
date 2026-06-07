@@ -2,6 +2,7 @@
 
 import { Plus, Trash2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { Checkbox } from "@/components/ui/checkbox"
 import { Input } from "@/components/ui/input"
 import {
   EXPENSE_PRESETS,
@@ -10,6 +11,7 @@ import {
   type ExpenseLine,
 } from "@/lib/settlement/settlement-math"
 import { formatVnd } from "@/lib/format"
+import { cn } from "@/lib/utils"
 import { ExpenseQuantityFields } from "./expense-quantity-fields"
 
 interface ExpenseLinesEditorProps {
@@ -40,12 +42,24 @@ export function ExpenseLinesEditor({ lines, onChange, disabled, total }: Expense
         <p className="text-xs font-bold text-primary">{formatVnd(total)}</p>
       </div>
       <p className="text-[10px] text-muted-foreground -mt-1">
-        Mỗi dòng: số lượng × đơn giá (K = nghìn, 31,5K = 31.500đ). Gõ , hoặc . đều được.
+        Mỗi dòng: số lượng × đơn giá (K = nghìn). Bỏ tick = không tính vào tổng chi.
       </p>
 
       <div className="space-y-2">
-        {lines.map((line) => (
-          <div key={line.id} className="flex items-center gap-2">
+        {lines.map((line) => {
+          const included = line.included !== false
+          return (
+          <div
+            key={line.id}
+            className={cn("flex items-center gap-2", !included && "opacity-50")}
+          >
+            <Checkbox
+              checked={included}
+              onCheckedChange={(v) => updateLine(line.id, { included: v === true })}
+              disabled={disabled}
+              className="shrink-0"
+              aria-label={included ? "Tính vào tổng chi" : "Không tính vào tổng chi"}
+            />
             <Input
               value={line.label}
               onChange={(e) => updateLine(line.id, { label: e.target.value })}
@@ -71,7 +85,8 @@ export function ExpenseLinesEditor({ lines, onChange, disabled, total }: Expense
               <Trash2 className="w-4 h-4" />
             </button>
           </div>
-        ))}
+          )
+        })}
       </div>
 
       {!disabled && (

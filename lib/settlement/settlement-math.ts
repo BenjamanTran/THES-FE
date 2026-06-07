@@ -19,6 +19,8 @@ export interface ExpenseLine {
   /** Số lượng × đơn giá (nghìn) → amount. Đơn vị hiển thị = label. */
   quantity: number
   unit_vnd: number
+  /** Bật = cộng vào tổng chi / chia tiền. Mặc định true. */
+  included: boolean
 }
 
 export function expenseLineAmount(quantity: number, unitVnd: number): number {
@@ -50,7 +52,8 @@ export function normalizeExpenseLine(raw: Partial<ExpenseLine> & Record<string, 
     quantity: 0,
     unit_vnd: 0,
     amount: 0,
-  }, { quantity, unit_vnd })
+    included: true,
+  }, { quantity, unit_vnd, included: raw.included })
 }
 
 export interface SettlementPlayerInput {
@@ -95,48 +98,53 @@ export interface SettlementDraft {
 export const EXPENSE_PRESETS = ["Sân", "Cầu", "Nước", "Gửi xe"] as const
 
 export function newExpenseLine(label = ""): ExpenseLine {
-  return { id: crypto.randomUUID(), label, quantity: 0, unit_vnd: 0, amount: 0 }
+  return { id: crypto.randomUUID(), label, quantity: 0, unit_vnd: 0, amount: 0, included: true }
 }
 
 export function applyExpenseLinePatch(line: ExpenseLine, patch: Partial<ExpenseLine>): ExpenseLine {
   const next = { ...line, ...patch }
   const quantity = Math.max(0, Math.floor(next.quantity ?? 0))
   const unit_vnd = Math.max(0, next.unit_vnd ?? 0)
+  const included = next.included !== false
   return {
     id: next.id,
     label: next.label,
     quantity,
     unit_vnd,
     amount: expenseLineAmount(quantity, unit_vnd),
+    included,
   }
 }
 
 export function totalExpense(lines: ExpenseLine[]): number {
-  return lines.reduce((sum, l) => sum + (Number.isFinite(l.amount) ? l.amount : 0), 0)
+  return lines.reduce(
+    (sum, l) => sum + (l.included !== false && Number.isFinite(l.amount) ? l.amount : 0),
+    0,
+  )
 }
 
-function arrivedPlayers(players: SettlementPlayerInput[]) {
-  return players.filter((p) => p.arrived_at_court)
+function settlementPlayers(players: SettlementPlayerInput[]) {
+  return players
 }
 
-function genderedArrived(players: SettlementPlayerInput[]) {
-  return arrivedPlayers(players).filter((p) => p.gender === "male" || p.gender === "female")
+function genderedParticipants(players: SettlementPlayerInput[]) {
+  return settlementPlayers(players).filter((p) => p.gender === "male" || p.gender === "female")
 }
 
 export function computeSettlement(
   players: SettlementPlayerInput[],
   draft: SettlementDraft,
 ): SettlementComputed {
-  const arrived = arrivedPlayers(players)
-  const gendered = genderedArrived(players)
+  const participants = settlementPlayers(players)
+  const gendered = genderedParticipants(players)
   const males = gendered.filter((p) => p.gender === "male")
   const females = gendered.filter((p) => p.gender === "female")
-  const ungendered = arrived.filter((p) => p.gender !== "male" && p.gender !== "female")
+  const ungendered = participants.filter((p) => p.gender !== "male" && p.gender !== "female")
   const expense = totalExpense(draft.expense_lines)
 
   const base = {
     total_expense: expense,
-    arrived_count: arrived.length,
+    arrived_count: participants.length,
     male_count: males.length,
     female_count: females.length,
     ungendered_players: ungendered.map((p) => ({ id: p.id, name: p.name })),
@@ -149,7 +157,7 @@ export function computeSettlement(
       draft.fixed_male_price * males.length + draft.fixed_female_price * females.length
     const warnings = [...base.warnings]
     if (males.length === 0 && females.length === 0) {
-      warnings.push("Chưa có người đã đến có giới tính")
+      warnings.push("Chưa có người có giới tính")
     }
     return {
       ...base,
@@ -163,11 +171,11 @@ export function computeSettlement(
     }
   }
 
-  return computeSplitEvenly(arrived, gendered, males, females, ungendered, expense, draft.gender_adjustment_steps)
+  return computeSplitEvenly(participants, gendered, males, females, ungendered, expense, draft.gender_adjustment_steps)
 }
 
 function computeSplitEvenly(
-  arrived: SettlementPlayerInput[],
+  participants: SettlementPlayerInput[],
   gendered: SettlementPlayerInput[],
   males: SettlementPlayerInput[],
   females: SettlementPlayerInput[],
@@ -180,7 +188,7 @@ function computeSplitEvenly(
     total_expense: expense,
     revenue: 0,
     profit: 0,
-    arrived_count: arrived.length,
+    arrived_count: participants.length,
     male_count: males.length,
     female_count: females.length,
     male_unit: null,
@@ -191,15 +199,15 @@ function computeSplitEvenly(
     warnings,
   })
 
-  if (arrived.length === 0) return empty(["Chưa có người đã đến sân"])
+  if (participants.length === 0) return empty(["Chưa có người tham gia"])
   if (expense <= 0) return empty(["Tổng chi phải lớn hơn 0"])
 
   const nm = males.length
   const nf = females.length
-  const pool = gendered.length > 0 ? gendered : arrived
+  const pool = gendered.length > 0 ? gendered : participants
   const warnings: string[] = []
   if (ungendered.length > 0) {
-    warnings.push("Một số người đến chưa có giới tính — không tính vào chia tiền")
+    warnings.push("Một số người chưa có giới tính — không tính vào chia tiền")
   }
 
   let perPlayer: PerPlayerAmount[]
@@ -235,7 +243,7 @@ function computeSplitEvenly(
     total_expense: expense,
     revenue,
     profit: revenue - expense,
-    arrived_count: arrived.length,
+    arrived_count: participants.length,
     male_count: nm,
     female_count: nf,
     male_unit: nm > 0 && nf > 0 && steps !== 0 ? displayMaleUnit : null,

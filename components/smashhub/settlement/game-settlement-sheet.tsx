@@ -1,7 +1,7 @@
 "use client"
 
 import { useState } from "react"
-import { Check, Copy, Loader2 } from "lucide-react"
+import { Check, Copy, Loader2, RefreshCw } from "lucide-react"
 import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet"
@@ -42,10 +42,17 @@ export function GameSettlementSheet({
     onPublished?.()
   }
 
+  const canSave =
+    vm.computed &&
+    vm.computed.errors.length === 0 &&
+    !vm.readOnly &&
+    (vm.hasUnsavedChanges || !vm.published)
+
   const canPublish =
     vm.computed &&
     vm.computed.errors.length === 0 &&
     !vm.readOnly &&
+    !vm.published &&
     (vm.computed.mode === "fixed_price" || vm.computed.per_player.length > 0)
 
   const gameLabel =
@@ -58,7 +65,10 @@ export function GameSettlementSheet({
         <SheetHeader className="px-4 pt-4 pb-2 border-b border-border/30 shrink-0">
           <SheetTitle className="text-base flex flex-col items-start gap-0.5">
             <span className="truncate max-w-full">Tính tiền — {gameLabel}</span>
-            <span className="text-[10px] font-medium text-muted-foreground">{vm.statusLabel}</span>
+            <span className="text-[10px] font-medium text-muted-foreground">
+              {vm.statusLabel}
+              {vm.hasUnsavedChanges && !vm.readOnly ? " · Chưa lưu" : ""}
+            </span>
           </SheetTitle>
         </SheetHeader>
 
@@ -142,24 +152,44 @@ export function GameSettlementSheet({
               </Button>
             )}
             {!vm.readOnly && (
-              <div className="flex gap-2">
+              <div className="flex flex-col gap-2">
                 <Button
                   type="button"
                   variant="outline"
-                  className="flex-1 rounded-full h-9 text-xs"
-                  disabled={vm.saving || vm.publishing}
-                  onClick={() => void vm.saveDraft()}
+                  className="w-full rounded-full h-9 text-xs"
+                  disabled={vm.loading || vm.saving}
+                  onClick={() => void vm.refreshPlayers()}
                 >
-                  {vm.saving ? <Loader2 className="w-4 h-4 animate-spin" /> : "Lưu nháp"}
+                  <RefreshCw className="w-3.5 h-3.5 mr-1" />
+                  Tải lại danh sách người chơi
                 </Button>
-                <Button
-                  type="button"
-                  className="flex-1 rounded-full h-9 text-xs"
-                  disabled={!canPublish || vm.publishing || vm.saving}
-                  onClick={() => void handlePublish()}
-                >
-                  {vm.publishing ? <Loader2 className="w-4 h-4 animate-spin" /> : "Công bố"}
-                </Button>
+                <div className="flex gap-2">
+                  <Button
+                    type="button"
+                    variant={vm.published ? "default" : "outline"}
+                    className="flex-1 rounded-full h-9 text-xs"
+                    disabled={!canSave || vm.saving || vm.publishing}
+                    onClick={() => void vm.saveSettlement()}
+                  >
+                    {vm.saving ? (
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                    ) : vm.published ? (
+                      "Cập nhật"
+                    ) : (
+                      "Lưu nháp"
+                    )}
+                  </Button>
+                  {!vm.published && (
+                    <Button
+                      type="button"
+                      className="flex-1 rounded-full h-9 text-xs"
+                      disabled={!canPublish || vm.publishing || vm.saving}
+                      onClick={() => void handlePublish()}
+                    >
+                      {vm.publishing ? <Loader2 className="w-4 h-4 animate-spin" /> : "Công bố"}
+                    </Button>
+                  )}
+                </div>
               </div>
             )}
           </div>
