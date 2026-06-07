@@ -83,6 +83,5 @@ export function draftToUpsertParams(draft: SettlementDraft) {
     gender_adjustment_steps: draft.gender_adjustment_steps,
     fixed_male_price: draft.fixed_male_price,
     fixed_female_price: draft.fixed_female_price,
-    shuttle_settings: draft.shuttle_settings ?? resolveShuttleSettings(undefined, draft.expense_lines),
   }
 }

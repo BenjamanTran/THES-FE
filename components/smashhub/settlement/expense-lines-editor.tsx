@@ -13,10 +13,10 @@ import {
   type SettlementDraft,
 } from "@/lib/settlement/settlement-math"
 import {
-  applyShuttleSettingsToLines,
+  applyShuttleSettingsToLine,
+  DEFAULT_SHUTTLE_SETTINGS,
   isShuttleLine,
   newShuttleExpenseLine,
-  resolveShuttleSettings,
   shuttleSettingsFromLine,
   type ShuttleSettings,
 } from "@/lib/settlement/shuttle-expense"
@@ -35,7 +35,6 @@ interface ExpenseLinesEditorProps {
 
 export function ExpenseLinesEditor({ draft, onDraftChange, disabled, total }: ExpenseLinesEditorProps) {
   const lines = draft.expense_lines
-  const shuttleSettings = resolveShuttleSettings(draft.shuttle_settings, lines)
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [settingsLineId, setSettingsLineId] = useState<string | null>(null)
 
@@ -54,18 +53,24 @@ export function ExpenseLinesEditor({ draft, onDraftChange, disabled, total }: Ex
 
   const addLine = (label = "") => {
     if (/^cầu/i.test(label)) {
-      updateLines([...lines, newShuttleExpenseLine(shuttleSettings) as ExpenseLine])
+      const newLine = newShuttleExpenseLine(DEFAULT_SHUTTLE_SETTINGS) as ExpenseLine
+      updateLines([...lines, newLine])
+      setSettingsLineId(newLine.id)
+      setSettingsOpen(true)
       return
     }
     updateLines([...lines, newExpenseLine(label)])
   }
 
   const applyShuttleSettings = (next: ShuttleSettings) => {
-    onDraftChange({
-      ...draft,
-      shuttle_settings: next,
-      expense_lines: applyShuttleSettingsToLines(lines, next),
-    })
+    if (!settingsLineId) return
+    updateLines(
+      lines.map((l) =>
+        l.id === settingsLineId && isShuttleLine(l)
+          ? (applyShuttleSettingsToLine(l, next) as ExpenseLine)
+          : l,
+      ),
+    )
   }
 
   const openShuttleSettings = (lineId: string) => {
@@ -78,8 +83,8 @@ export function ExpenseLinesEditor({ draft, onDraftChange, disabled, total }: Ex
 
   const settingsForSheet =
     settingsLineId != null
-      ? shuttleSettingsFromLine(lines.find((l) => l.id === settingsLineId) ?? lines[0])
-      : shuttleSettings
+      ? shuttleSettingsFromLine(lines.find((l) => l.id === settingsLineId)!)
+      : DEFAULT_SHUTTLE_SETTINGS
 
   return (
     <div className="space-y-3">
@@ -95,7 +100,7 @@ export function ExpenseLinesEditor({ draft, onDraftChange, disabled, total }: Ex
         {lines.map((line) => {
           const included = line.included !== false
           const shuttle = isShuttleLine(line)
-          const lineSettings = shuttle ? shuttleSettingsFromLine(line) : shuttleSettings
+          const lineSettings = shuttle ? shuttleSettingsFromLine(line) : DEFAULT_SHUTTLE_SETTINGS
 
           return (
             <div

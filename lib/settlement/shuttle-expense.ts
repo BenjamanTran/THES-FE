@@ -94,9 +94,10 @@ export function applyShuttleToLine<T extends ShuttleLineShape>(
   }
 }
 
-export function applyShuttleSettingsToLines<T extends ShuttleLineShape>(
-  lines: T[],
+/** Cập nhật cài đặt cho một dòng cầu (không ảnh hưởng dòng khác). */
+export function applyShuttleSettingsToLine<T extends ShuttleLineShape>(
+  line: T,
   settings: ShuttleSettings,
-): T[] {
-  return lines.map((line) => (isShuttleLine(line) ? applyShuttleToLine(line, settings) : line))
+): T {
+  return applyShuttleToLine(line, settings)
 }
