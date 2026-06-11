@@ -29,11 +29,18 @@ import {
   Undo2,
   Link2,
   Wallet,
+  ChevronDown,
 } from "lucide-react"
 import { UserAvatar } from "../user-avatar"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog"
 import { SkillBadge } from "../skill-badge"
 import { GenderIcon } from "../gender-icon"
@@ -50,7 +57,7 @@ import { useAppTheme } from "@/lib/theme-provider"
 import { cn } from "@/lib/utils"
 import { format } from "date-fns"
 import { vi } from "date-fns/locale"
-import { ratingToStars } from "@/lib/rating-stars"
+import { sessionSkillStars, sessionSkillTier } from "@/lib/player-session-skill"
 import { formatPriceRange } from "@/lib/format"
 import { generateFbPost, statusMeta } from "./meta"
 import { MAX_CO_HOSTS } from "@/components/smashhub/game-detail/constants"
@@ -193,6 +200,8 @@ export function GameDetailView({ vm }: { vm: GameDetailViewModel }) {
     pairTapLoading,
     onPlayerPairTap,
     reloadGame,
+    handleTransition,
+    transitionLoading,
   } = vm
 
   const showStickySuggest =
@@ -693,12 +702,10 @@ export function GameDetailView({ vm }: { vm: GameDetailViewModel }) {
                             )}
                           </p>
                           <div className="flex items-center gap-1.5 mt-0.5">
-                            <SkillBadge level={player.host_rated_tier || player.rank?.tier || null} size="xs" compact />
+                            <SkillBadge level={sessionSkillTier(player)} size="xs" compact />
                             {(() => {
-                              const tier = player.host_rated_tier || player.rank?.tier
-                              const stars = player.host_rated_tier
-                                ? player.host_rated_stars
-                                : player.rank ? ratingToStars(player.rank.tier, player.rank.rating) : null
+                              const stars = sessionSkillStars(player)
+                              const tier = sessionSkillTier(player)
                               if (!tier || stars == null) return null
                               return (
                                 <span className="flex items-center gap-0.5 text-[10px] text-amber-400">
@@ -1046,37 +1053,41 @@ export function GameDetailView({ vm }: { vm: GameDetailViewModel }) {
 
         <footer className="px-4 py-4 border-t border-border/20 flex-shrink-0 safe-bottom">
           <div className="flex gap-3">
-            <Button variant="outline" className="flex-1 rounded-full" disabled>
-              <MessageCircle className="w-4 h-4 mr-1" />
-              Chat nhóm
-            </Button>
-            {primaryAction ? (
-              <Button
-                variant={primaryAction.variant}
-                className={`flex-1 rounded-full ${
-                  primaryAction.destructive
-                    ? "border-destructive/40 text-destructive hover:bg-destructive/10"
-                    : ""
-                }`}
-                onClick={primaryAction.onClick}
-                disabled={primaryAction.disabled || actionLoading || loading || !game}
-              >
-                {actionLoading ? (
-                  <Loader2 className="w-4 h-4 animate-spin mr-1" />
-                ) : (
-                  <primaryAction.icon className="w-4 h-4 mr-1" />
-                )}
-                {primaryAction.label}
-              </Button>
+            {canManage ? (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    variant="outline"
+                    className={`flex-1 rounded-full ${statusMeta(game?.status ?? "open").className}`}
+                    disabled={transitionLoading || !game}
+                  >
+                    {transitionLoading ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : null}
+                    {statusMeta(game?.status ?? "open").label}
+                    <ChevronDown className="w-4 h-4 ml-1" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="start" className="min-w-[160px]">
+                  {(["open", "full", "ongoing", "finished", "cancelled"] as const).map((s) => {
+                    const meta = statusMeta(s)
+                    return (
+                      <DropdownMenuItem
+                        key={s}
+                        disabled={s === game?.status}
+                        className={s === game?.status ? "font-bold" : ""}
+                        onSelect={() => handleTransition(s)}
+                      >
+                        <span className={`w-2 h-2 rounded-full mr-2 ${meta.className.split(" ")[0]}`} />
+                        {meta.label}
+                        {s === game?.status && <Check className="w-3.5 h-3.5 ml-auto" />}
+                      </DropdownMenuItem>
+                    )
+                  })}
+                </DropdownMenuContent>
+              </DropdownMenu>
             ) : (
-              <Button variant="secondary" className="flex-1 rounded-full" disabled>
-                {game?.status === "cancelled"
-                  ? "Đã huỷ"
-                  : game?.status === "finished"
-                    ? "Đã kết thúc"
-                    : game?.status === "ongoing"
-                      ? "Đang diễn ra"
-                      : "Đã kết thúc"}
+              <Button variant="outline" className="flex-1 rounded-full" disabled>
+                <MessageCircle className="w-4 h-4 mr-1" />
+                Chat nhóm
               </Button>
             )}
           </div>

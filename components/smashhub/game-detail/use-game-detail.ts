@@ -26,11 +26,13 @@ import {
   deletePlaceholder,
   ratePlayer,
   togglePlayerArrived,
+  transitionGame,
   type GameDetail,
   type GamePlayer,
   type MatchSummary,
   type FinishMatchResponse,
   type Tier,
+  type Game,
 } from "@/lib/api"
 import { useAuth, useRequireAuth } from "@/lib/auth-context"
 import {
@@ -516,6 +518,7 @@ export function useGameDetail(gameId: number | null, onClose: () => void) {
   }
 
   const [startingMatchId, setStartingMatchId] = useState<number | null>(null)
+  const [transitionLoading, setTransitionLoading] = useState(false)
   const [suggestActionLoading, setSuggestActionLoading] = useState(false)
   const [pairArrangeLoading, setPairArrangeLoading] = useState(false)
   const [finishingMatchId, setFinishingMatchId] = useState<number | null>(null)
@@ -745,6 +748,19 @@ export function useGameDetail(gameId: number | null, onClose: () => void) {
     [bumpFinishGeneration, finishingMatchId, patchMatchInGame, showPendingUndo],
   )
 
+  const handleTransition = async (targetStatus: Game["status"]) => {
+    if (!game) return
+    setTransitionLoading(true)
+    try {
+      const updated = await transitionGame(game.id, targetStatus)
+      applyGameDetail(updated)
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : "Không thể chuyển trạng thái")
+    } finally {
+      setTransitionLoading(false)
+    }
+  }
+
   const handleStartMatch = async (matchId: number) => {
     if (!game) return
     const match = game.matches?.find((m) => m.id === matchId)
@@ -948,12 +964,7 @@ export function useGameDetail(gameId: number | null, onClose: () => void) {
 
   const isGameTime = useMemo(() => {
     if (!game) return false
-    if (game.status === "cancelled") return false
-    if (game.status === "ongoing" || game.status === "finished") return true
-    const now = Date.now()
-    const start = new Date(game.start_time).getTime()
-    const end = new Date(game.end_time).getTime()
-    return now >= start && now <= end
+    return game.status === "ongoing"
   }, [game])
 
   const playerMatchCounts = useMemo(
@@ -1391,6 +1402,8 @@ export function useGameDetail(gameId: number | null, onClose: () => void) {
     pairTapLoading,
     onPlayerPairTap,
     reloadGame,
+    handleTransition,
+    transitionLoading,
   }
 }
 

@@ -14,7 +14,7 @@ import {
 } from "@/components/ui/sheet"
 import { SkillBadge } from "./skill-badge"
 import { GenderIcon } from "./gender-icon"
-import { ratingToStars } from "@/lib/rating-stars"
+import { sessionSkillStars, sessionSkillTier } from "@/lib/player-session-skill"
 import { createMatch, updateMatch, type GamePlayer, type MatchSummary } from "@/lib/api"
 import {
   balanceTeams,
@@ -360,11 +360,9 @@ export function CreateMatchSheet({
                     <div className="flex-1 min-w-0 flex items-center gap-1.5">
                       <span className="text-xs font-medium truncate">{p.name || `#${p.id}`}</span>
                       {p.gender && <GenderIcon gender={p.gender} size="sm" />}
-                      <SkillBadge level={p.host_rated_tier || p.rank?.tier || null} size="xs" compact />
+                      <SkillBadge level={sessionSkillTier(p)} size="xs" compact />
                       {(() => {
-                        const stars = p.host_rated_tier && p.host_rated_stars
-                          ? p.host_rated_stars
-                          : p.rank ? ratingToStars(p.rank.tier, p.rank.rating) : null
+                        const stars = sessionSkillStars(p)
                         if (stars == null) return null
                         return (
                           <span className="flex items-center gap-0.5 text-[10px] text-amber-400">
@@ -439,11 +437,9 @@ function TeamColumn({
               <div className="flex items-center gap-1 min-w-0 flex-wrap">
                 <span className="text-xs">{p?.name || `#${id}`}</span>
                 {p?.gender && <GenderIcon gender={p.gender} size="sm" />}
-                <SkillBadge level={p?.host_rated_tier || p?.rank?.tier || null} size="xs" compact showIcon={false} />
+                <SkillBadge level={sessionSkillTier(p)} size="xs" compact showIcon={false} />
                 {(() => {
-                  const stars = p?.host_rated_tier && p?.host_rated_stars
-                    ? p.host_rated_stars
-                    : p?.rank ? ratingToStars(p.rank.tier, p.rank.rating) : null
+                  const stars = sessionSkillStars(p)
                   if (stars == null) return null
                   return (
                     <span className="flex items-center gap-0.5 text-[9px] text-amber-400">

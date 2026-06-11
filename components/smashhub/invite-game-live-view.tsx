@@ -6,7 +6,7 @@ import { Badge } from "@/components/ui/badge"
 import { GenderIcon } from "./gender-icon"
 import { SkillBadge } from "./skill-badge"
 import { UserAvatar } from "./user-avatar"
-import { ratingToStars } from "@/lib/rating-stars"
+import { sessionSkillStars, sessionSkillTier } from "@/lib/player-session-skill"
 import type { InviteGameInfo, InviteLiveMatch, InviteLivePlayer } from "@/lib/api"
 import { playerDisplayName } from "@/lib/player-display-name"
 import { resolveDisplayCourtNumber } from "@/lib/match-court-display"
@@ -209,13 +209,8 @@ export function InviteGameLiveView({
         <ul className="space-y-1.5 max-h-48 overflow-y-auto rounded-xl border border-border/40 divide-y divide-border/30">
           {players.map((p) => {
             const s = p.session_matches
-            const tier = p.host_rated_tier || p.rank?.tier
-            const stars =
-              p.host_rated_tier != null && p.host_rated_stars != null
-                ? p.host_rated_stars
-                : p.rank
-                  ? ratingToStars(p.rank.tier, p.rank.rating)
-                  : null
+            const tier = sessionSkillTier(p)
+            const stars = sessionSkillStars(p)
             return (
               <li key={p.id} className="flex items-center gap-2.5 px-3 py-2 text-sm">
                 <UserAvatar

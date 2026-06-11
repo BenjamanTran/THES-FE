@@ -137,6 +137,8 @@ export interface MatchPlayer {
   avatar_url?: string | null
   gender?: Gender
   rank?: PlayerRank | null
+  host_rated_tier?: Tier | null
+  host_rated_stars?: number | null
 }
 
 export interface MatchSummary {

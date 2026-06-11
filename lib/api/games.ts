@@ -143,3 +143,10 @@ export function adjustSessionPlayed(gameId: number, userId: number, delta: 1 | -
     },
   )
 }
+
+export function transitionGame(id: number, status: Game["status"]) {
+  return request<GameDetail>(`/api/v1/games/${id}/transition`, {
+    method: "POST",
+    body: JSON.stringify({ status }),
+  })
+}

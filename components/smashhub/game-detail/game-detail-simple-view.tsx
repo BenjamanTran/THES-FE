@@ -32,13 +32,15 @@ import { PlaceholderPlayerSheet } from "../placeholder-player-sheet"
 import { GameRatingSheet } from "./game-rating-sheet"
 import { useAppTheme } from "@/lib/theme-provider"
 import { cn } from "@/lib/utils"
-import type { GamePlayer, Gender } from "@/lib/api"
+import { sessionSkillTier } from "@/lib/player-session-skill"
 import { formatPriceRange } from "@/lib/format"
 import { statusMeta } from "./meta"
 import type { GameDetailSimpleViewModel } from "./use-game-detail-simple"
 
+import type { GamePlayer, Gender } from "@/lib/api"
+
 function playerTier(player: GamePlayer): string | null {
-  return player.host_rated_tier || player.rank?.tier || null
+  return sessionSkillTier(player)
 }
 
 function playedCount(player: GamePlayer): number {

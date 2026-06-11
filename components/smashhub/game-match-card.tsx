@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button"
 import { SKILL_LABELS, skillColors, type SkillLevel } from "./skill-badge"
 import { GenderIcon } from "./gender-icon"
 import { MatchStatusBadge, getMatchStatusMeta } from "./match-status-badge"
-import { ratingToStars } from "@/lib/rating-stars"
+import { sessionSkillStars, sessionSkillTier } from "@/lib/player-session-skill"
 import { cn } from "@/lib/utils"
 import type { GameDetail, MatchSummary } from "@/lib/api"
 import { activeGamePlayerIds, getPendingStartBlockReason } from "@/lib/suggest-next-match"
@@ -46,14 +46,10 @@ function matchPlayerAvatarUrl(
 
 function playerMeta(p: MatchSummary["team_a"][number], game: GameDetail) {
   const gp = game.players.find((pl) => pl.id === p.id)
+  const skill = gp ?? p
   const gender = p.gender ?? gp?.gender
-  const tier = gp?.host_rated_tier || p.rank?.tier
-  const stars =
-    gp?.host_rated_tier && gp?.host_rated_stars != null
-      ? gp.host_rated_stars
-      : p.rank
-        ? ratingToStars(p.rank.tier, p.rank.rating)
-        : null
+  const tier = sessionSkillTier(skill)
+  const stars = sessionSkillStars(skill)
   const tc = tier ? skillColors[tier] || skillColors.newbie : null
   return { gender, tier, stars, tc }
 }
