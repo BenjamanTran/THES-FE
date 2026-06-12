@@ -1,15 +1,24 @@
 import { request } from "./client"
-import type { ExpenseLine, SettlementComputed, SettlementMode } from "@/lib/settlement/settlement-math"
-import type { ShuttleSettings } from "@/lib/settlement/shuttle-expense"
+import type {
+  ExpenseLine,
+  SettlementComputed,
+  SettlementMode,
+} from "@/lib/settlement/settlement-math"
 
-export interface GameSettlementRecord {
+export interface GameSettlementSectionRecord {
+  id: string
+  label: string
   mode: SettlementMode
-  status: "draft" | "published"
   expense_lines: ExpenseLine[]
-  gender_adjustment_steps: number
+  desired_female_price: number
   fixed_male_price: number
   fixed_female_price: number
-  shuttle_settings?: ShuttleSettings | null
+  participant_ids: number[]
+}
+
+export interface GameSettlementRecord {
+  status: "draft" | "published"
+  sections: GameSettlementSectionRecord[]
   published_at: string | null
   updated_at: string
 }
@@ -23,13 +32,19 @@ export interface SettlementResponse {
   computed: SettlementComputed | null
 }
 
-export interface UpsertSettlementParams {
+export interface UpsertSettlementSectionParams {
+  id: string
+  label: string
   mode: SettlementMode
   expense_lines: ExpenseLine[]
-  gender_adjustment_steps: number
+  desired_female_price: number
   fixed_male_price: number
   fixed_female_price: number
-  shuttle_settings?: ShuttleSettings
+  participant_ids: number[]
+}
+
+export interface UpsertSettlementParams {
+  sections: UpsertSettlementSectionParams[]
 }
 
 export function fetchGameSettlement(gameId: number) {

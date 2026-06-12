@@ -1,4 +1,4 @@
-import type { GamePlayer, Gender } from "@/lib/api"
+import type { Gender } from "@/lib/api"
 import type { ShuttleSettings } from "./shuttle-expense"
 import {
   applyShuttleToLine,
@@ -6,7 +6,6 @@ import {
   isShuttleLine,
 } from "./shuttle-expense"
 
-export const GENDER_STEP_VND = 1_000
 /** Làm tròn chia tiền lên bội 500đ — tổng thu có thể cao hơn chi. */
 export const SHARE_ROUND_VND = 500
 
@@ -24,15 +23,11 @@ export interface ExpenseLine {
   id: string
   label: string
   amount: number
-  /** Số lượng × đơn giá (nghìn) → amount. Đơn vị hiển thị = label. */
   quantity: number
   unit_vnd: number
-  /** Bật = cộng vào tổng chi / chia tiền. Mặc định true. */
   included: boolean
   kind?: ExpenseLineKind
-  /** Giá 1 ống cầu (VND) — chỉ dòng kind=shuttle. */
   shuttle_tube_vnd?: number
-  /** Số quả / ống — chỉ dòng kind=shuttle. */
   shuttle_per_tube?: number
 }
 
@@ -84,43 +79,82 @@ export interface SettlementPlayerInput {
   isHost?: boolean
 }
 
+export interface PerPlayerSectionAmount {
+  section_id: string
+  label: string
+  amount: number
+}
+
 export interface PerPlayerAmount {
   id: number
   name: string | null
   gender?: Gender
   amount: number
+  sections: PerPlayerSectionAmount[]
 }
 
-export interface SettlementComputed {
+export interface SettlementSection {
+  id: string
+  label: string
+  mode: SettlementMode
+  expense_lines: ExpenseLine[]
+  desired_female_price: number
+  fixed_male_price: number
+  fixed_female_price: number
+  participant_ids: number[]
+  shuttle_settings?: ShuttleSettings
+}
+
+export interface SectionComputed {
+  id: string
+  label: string
   mode: SettlementMode
   total_expense: number
   revenue: number
   profit: number
-  arrived_count: number
+  participant_count: number
   male_count: number
   female_count: number
   male_unit: number | null
   female_unit: number | null
-  per_player: PerPlayerAmount[]
+  per_player: { id: number; name: string | null; gender?: Gender; amount: number }[]
   ungendered_players: { id: number; name: string | null }[]
   errors: string[]
   warnings: string[]
 }
 
+export interface SettlementComputed {
+  total_expense: number
+  revenue: number
+  profit: number
+  arrived_count: number
+  sections: SectionComputed[]
+  per_player: PerPlayerAmount[]
+  errors: string[]
+  warnings: string[]
+}
+
 export interface SettlementDraft {
-  mode: SettlementMode
-  expense_lines: ExpenseLine[]
-  gender_adjustment_steps: number
-  fixed_male_price: number
-  fixed_female_price: number
-  /** Cài đặt ống cầu mặc định cho dòng Cầu. */
-  shuttle_settings?: ShuttleSettings
+  sections: SettlementSection[]
 }
 
 export const EXPENSE_PRESETS = ["Sân", "Cầu", "Nước", "Gửi xe"] as const
 
 export function newExpenseLine(label = ""): ExpenseLine {
   return { id: crypto.randomUUID(), label, quantity: 0, unit_vnd: 0, amount: 0, included: true }
+}
+
+export function newSection(label = "Phần 1", participantIds: number[] = []): SettlementSection {
+  return {
+    id: crypto.randomUUID(),
+    label,
+    mode: "split_evenly",
+    expense_lines: [newExpenseLine("Sân"), newExpenseLine("Cầu")],
+    desired_female_price: 0,
+    fixed_male_price: 0,
+    fixed_female_price: 0,
+    participant_ids: participantIds,
+  }
 }
 
 export function applyExpenseLinePatch(line: ExpenseLine, patch: Partial<ExpenseLine>): ExpenseLine {
@@ -159,112 +193,92 @@ export function totalExpense(lines: ExpenseLine[]): number {
   )
 }
 
-function settlementPlayers(players: SettlementPlayerInput[]) {
-  return players
-}
-
-function genderedParticipants(players: SettlementPlayerInput[]) {
-  return settlementPlayers(players).filter((p) => p.gender === "male" || p.gender === "female")
-}
-
-export function computeSettlement(
-  players: SettlementPlayerInput[],
-  draft: SettlementDraft,
-): SettlementComputed {
-  const participants = settlementPlayers(players)
-  const gendered = genderedParticipants(players)
+export function computeSection(
+  section: SettlementSection,
+  allPlayers: SettlementPlayerInput[],
+): SectionComputed {
+  const participantIds = new Set(section.participant_ids)
+  const pool = allPlayers.filter((p) => participantIds.has(p.id))
+  const gendered = pool.filter((p) => p.gender === "male" || p.gender === "female")
   const males = gendered.filter((p) => p.gender === "male")
   const females = gendered.filter((p) => p.gender === "female")
-  const ungendered = participants.filter((p) => p.gender !== "male" && p.gender !== "female")
-  const expense = totalExpense(draft.expense_lines)
+  const ungendered = pool.filter((p) => p.gender !== "male" && p.gender !== "female")
+  const expense = totalExpense(section.expense_lines)
 
   const base = {
+    id: section.id,
+    label: section.label,
+    mode: section.mode,
     total_expense: expense,
-    arrived_count: participants.length,
+    participant_count: pool.length,
     male_count: males.length,
     female_count: females.length,
     ungendered_players: ungendered.map((p) => ({ id: p.id, name: p.name })),
-    errors: [] as string[],
-    warnings: [] as string[],
   }
 
-  if (draft.mode === "fixed_price") {
-    const revenue =
-      draft.fixed_male_price * males.length + draft.fixed_female_price * females.length
-    const warnings = [...base.warnings]
-    if (males.length === 0 && females.length === 0) {
-      warnings.push("Chưa có người có giới tính")
-    }
-    return {
-      ...base,
-      mode: "fixed_price",
-      revenue,
-      profit: revenue - expense,
-      male_unit: draft.fixed_male_price,
-      female_unit: draft.fixed_female_price,
-      per_player: [],
-      warnings,
-    }
+  if (section.mode === "fixed_price") {
+    return computeFixedPriceSection(section, base, males, females, pool)
   }
-
-  return computeSplitEvenly(participants, gendered, males, females, ungendered, expense, draft.gender_adjustment_steps)
+  return computeSplitEvenlySection(section, base, males, females, gendered, pool)
 }
 
-function computeSplitEvenly(
-  participants: SettlementPlayerInput[],
-  gendered: SettlementPlayerInput[],
+type SectionBase = {
+  id: string
+  label: string
+  mode: SettlementMode
+  total_expense: number
+  participant_count: number
+  male_count: number
+  female_count: number
+  ungendered_players: { id: number; name: string | null }[]
+}
+
+function computeSplitEvenlySection(
+  section: SettlementSection,
+  base: SectionBase,
   males: SettlementPlayerInput[],
   females: SettlementPlayerInput[],
-  ungendered: SettlementPlayerInput[],
-  expense: number,
-  steps: number,
-): SettlementComputed {
-  const empty = (errors: string[], warnings: string[] = []): SettlementComputed => ({
-    mode: "split_evenly",
-    total_expense: expense,
+  gendered: SettlementPlayerInput[],
+  pool: SettlementPlayerInput[],
+): SectionComputed {
+  const empty = (errors: string[], warnings: string[] = []): SectionComputed => ({
+    ...base,
     revenue: 0,
-    profit: 0,
-    arrived_count: participants.length,
-    male_count: males.length,
-    female_count: females.length,
+    profit: -base.total_expense,
     male_unit: null,
     female_unit: null,
     per_player: [],
-    ungendered_players: ungendered.map((p) => ({ id: p.id, name: p.name })),
     errors,
     warnings,
   })
 
-  if (participants.length === 0) return empty(["Chưa có người tham gia"])
-  if (expense <= 0) return empty(["Tổng chi phải lớn hơn 0"])
+  if (pool.length === 0) return empty([])
+  if (base.total_expense <= 0) return empty(["Tổng chi phải lớn hơn 0"])
 
-  const nm = males.length
-  const nf = females.length
-  const pool = gendered.length > 0 ? gendered : participants
+  const computePool = gendered.length > 0 ? gendered : pool
   const warnings: string[] = []
-  if (ungendered.length > 0) {
+  if (gendered.length > 0 && pool.length !== gendered.length) {
     warnings.push("Một số người chưa có giới tính — không tính vào chia tiền")
   }
 
-  let perPlayer: PerPlayerAmount[]
-  let displayMaleUnit: number | null = null
-  let displayFemaleUnit: number | null = null
+  const nm = males.length
+  const nf = females.length
+  const desired = section.desired_female_price
 
-  if (nm > 0 && nf > 0 && steps !== 0) {
-    const baseEven = expense / (nm + nf)
-    const maleUnit = ceilShareAmount(baseEven + steps * GENDER_STEP_VND)
-    if (maleUnit * nm > expense) {
-      return empty(["Điều chỉnh nam quá cao — nữ âm tiền"], warnings)
-    }
-    const femaleUnit =
-      nf > 0 ? ceilShareAmount((expense - maleUnit * nm) / nf) : 0
+  let perPlayer: { id: number; name: string | null; gender?: Gender; amount: number }[]
+  let maleUnit = 0
+  let femaleUnit = 0
 
-    displayMaleUnit = maleUnit
-    displayFemaleUnit = femaleUnit
-    perPlayer = assignGenderShares(pool, males, maleUnit, femaleUnit)
+  if (nm > 0 && nf > 0 && desired > 0) {
+    femaleUnit = ceilShareAmount(desired)
+    const remaining = base.total_expense - femaleUnit * nf
+    maleUnit = remaining > 0 ? ceilShareAmount(remaining / nm) : 0
+    perPlayer = assignGenderShares(computePool, males, maleUnit, femaleUnit)
   } else {
-    const unit = ceilShareAmount(expense / pool.length)
-    perPlayer = pool.map((p) => ({
+    const unit = ceilShareAmount(base.total_expense / computePool.length)
+    maleUnit = unit
+    femaleUnit = unit
+    perPlayer = computePool.map((p) => ({
       id: p.id,
       name: p.name,
       gender: p.gender,
@@ -275,17 +289,46 @@ function computeSplitEvenly(
   const revenue = perPlayer.reduce((s, p) => s + p.amount, 0)
 
   return {
-    mode: "split_evenly",
-    total_expense: expense,
+    ...base,
     revenue,
-    profit: revenue - expense,
-    arrived_count: participants.length,
-    male_count: nm,
-    female_count: nf,
-    male_unit: nm > 0 && nf > 0 && steps !== 0 ? displayMaleUnit : null,
-    female_unit: nm > 0 && nf > 0 && steps !== 0 ? displayFemaleUnit : null,
+    profit: revenue - base.total_expense,
+    male_unit: maleUnit,
+    female_unit: femaleUnit,
     per_player: perPlayer,
-    ungendered_players: ungendered.map((p) => ({ id: p.id, name: p.name })),
+    errors: [],
+    warnings,
+  }
+}
+
+function computeFixedPriceSection(
+  section: SettlementSection,
+  base: SectionBase,
+  males: SettlementPlayerInput[],
+  females: SettlementPlayerInput[],
+  pool: SettlementPlayerInput[],
+): SectionComputed {
+  const nm = males.length
+  const nf = females.length
+  const malePrice = section.fixed_male_price
+  const femalePrice = section.fixed_female_price
+  const perPlayer = pool.map((p) => ({
+    id: p.id,
+    name: p.name,
+    gender: p.gender,
+    amount: p.gender === "male" ? malePrice : p.gender === "female" ? femalePrice : 0,
+  }))
+  const revenue = malePrice * nm + femalePrice * nf
+  const warnings: string[] = []
+  if (nm === 0 && nf === 0 && pool.length > 0) {
+    warnings.push("Chưa có người có giới tính")
+  }
+  return {
+    ...base,
+    revenue,
+    profit: revenue - base.total_expense,
+    male_unit: malePrice,
+    female_unit: femalePrice,
+    per_player: perPlayer,
     errors: [],
     warnings,
   }
@@ -296,7 +339,7 @@ function assignGenderShares(
   males: SettlementPlayerInput[],
   maleUnit: number,
   femaleUnit: number,
-): PerPlayerAmount[] {
+): { id: number; name: string | null; gender?: Gender; amount: number }[] {
   const maleIds = new Set(males.map((p) => p.id))
   return pool.map((p) => ({
     id: p.id,
@@ -306,21 +349,44 @@ function assignGenderShares(
   }))
 }
 
-export function maxGenderSteps(
-  expense: number,
-  maleCount: number,
-  femaleCount: number,
-): number {
-  if (maleCount < 1 || femaleCount < 1 || expense <= 0) return 0
-  const baseEven = expense / (maleCount + femaleCount)
-  let steps = 0
-  while (true) {
-    const next = steps + 1
-    const maleUnit = ceilShareAmount(baseEven + next * GENDER_STEP_VND)
-    if (maleUnit * maleCount > expense) return steps
-    const femaleUnit = ceilShareAmount((expense - maleUnit * maleCount) / femaleCount)
-    if (femaleUnit <= 0 && expense - maleUnit * maleCount < 0) return steps
-    steps = next
-    if (steps > 500) return steps
+export function computeSettlement(
+  players: SettlementPlayerInput[],
+  draft: SettlementDraft,
+): SettlementComputed {
+  const sections = draft.sections.map((s) => computeSection(s, players))
+
+  const perUser = new Map<number, PerPlayerAmount>()
+  sections.forEach((sec) => {
+    sec.per_player.forEach((row) => {
+      const entry = perUser.get(row.id) ?? {
+        id: row.id,
+        name: row.name,
+        gender: row.gender,
+        amount: 0,
+        sections: [],
+      }
+      entry.name = row.name ?? entry.name
+      entry.gender = entry.gender ?? row.gender
+      entry.amount += row.amount
+      entry.sections.push({ section_id: sec.id, label: sec.label, amount: row.amount })
+      perUser.set(row.id, entry)
+    })
+  })
+
+  const total_expense = sections.reduce((s, sec) => s + sec.total_expense, 0)
+  const revenue = sections.reduce((s, sec) => s + sec.revenue, 0)
+  const errors = sections.flatMap((sec) => sec.errors)
+  const warningSet = new Set<string>()
+  sections.forEach((sec) => sec.warnings.forEach((w) => warningSet.add(w)))
+
+  return {
+    total_expense,
+    revenue,
+    profit: revenue - total_expense,
+    arrived_count: players.filter((p) => p.arrived_at_court).length,
+    sections,
+    per_player: Array.from(perUser.values()),
+    errors,
+    warnings: Array.from(warningSet),
   }
 }

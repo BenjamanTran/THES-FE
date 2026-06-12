@@ -32,6 +32,11 @@ function playersForSettlement(players: GamePlayer[], hostId?: number) {
   }))
 }
 
+function arrivedIds(game: GameDetail | null): number[] {
+  if (!game?.players) return []
+  return game.players.filter((p) => p.arrived_at_court).map((p) => p.id)
+}
+
 export function canManageGameSettlement(game: GameDetail, userId: number): boolean {
   if (game.host?.id === userId) return true
   return game.players?.some((p) => p.id === userId && p.role === "co_host") ?? false
@@ -64,7 +69,7 @@ export function useGameSettlement(gameId: number | null, open: boolean) {
 
     if (!canEditDraft && res.message) return
 
-    const nextDraft = draftFromSettlementRecordOrDefault(res.settlement, gameData)
+    const nextDraft = draftFromSettlementRecordOrDefault(res.settlement, arrivedIds(gameData))
     setDraft(nextDraft)
     setSavedSnapshot(res.settlement ? settlementDraftSnapshot(nextDraft) : null)
   }, [])

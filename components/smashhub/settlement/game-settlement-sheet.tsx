@@ -1,15 +1,15 @@
 "use client"
 
 import { useState } from "react"
-import { Check, Copy, Loader2, RefreshCw } from "lucide-react"
+import { Check, Copy, Loader2, Plus, RefreshCw } from "lucide-react"
 import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet"
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { useGameSettlement } from "@/hooks/use-game-settlement"
 import { formatSettlementCopy } from "@/lib/settlement/settlement-copy"
-import { SplitEvenlyPanel } from "./split-evenly-panel"
-import { FixedPricePanel } from "./fixed-price-panel"
+import { formatVnd } from "@/lib/format"
+import { newSection, type SettlementSection } from "@/lib/settlement/settlement-math"
+import { SettlementSectionCard } from "./settlement-section-card"
 
 interface GameSettlementSheetProps {
   open: boolean
@@ -42,6 +42,40 @@ export function GameSettlementSheet({
     onPublished?.()
   }
 
+  const allPlayers = (vm.game?.players ?? [])
+    .filter((p) => p.arrived_at_court)
+    .map((p) => ({
+      id: p.id,
+      name: p.name,
+      gender: p.gender,
+      arrived_at_court: p.arrived_at_court,
+    }))
+
+  const handleAddSection = () => {
+    const prev = vm.draft.sections[vm.draft.sections.length - 1]
+    const inheritedIds = prev ? [...prev.participant_ids] : allPlayers.map((p) => p.id)
+    const nextLabel = `Phần ${vm.draft.sections.length + 1}`
+    vm.setDraft({
+      ...vm.draft,
+      sections: [...vm.draft.sections, newSection(nextLabel, inheritedIds)],
+    })
+  }
+
+  const handleSectionChange = (index: number, next: SettlementSection) => {
+    vm.setDraft({
+      ...vm.draft,
+      sections: vm.draft.sections.map((s, i) => (i === index ? next : s)),
+    })
+  }
+
+  const handleSectionRemove = (index: number) => {
+    if (vm.draft.sections.length <= 1) return
+    vm.setDraft({
+      ...vm.draft,
+      sections: vm.draft.sections.filter((_, i) => i !== index),
+    })
+  }
+
   const canSave =
     vm.computed &&
     vm.computed.errors.length === 0 &&
@@ -53,7 +87,7 @@ export function GameSettlementSheet({
     vm.computed.errors.length === 0 &&
     !vm.readOnly &&
     !vm.published &&
-    (vm.computed.mode === "fixed_price" || vm.computed.per_player.length > 0)
+    vm.computed.per_player.length > 0
 
   const gameLabel =
     vm.game?.title ||
@@ -85,46 +119,103 @@ export function GameSettlementSheet({
             </div>
           ) : (
             <div className="space-y-4">
-              <Tabs
-                value={vm.draft.mode}
-                onValueChange={(v) => {
-                  if (vm.readOnly) return
-                  vm.setDraft({ ...vm.draft, mode: v as typeof vm.draft.mode })
-                }}
-              >
-                <TabsList className="w-full grid grid-cols-2 h-9 bg-secondary/50">
-                  <TabsTrigger
-                    value="split_evenly"
-                    disabled={vm.readOnly}
-                    className="h-7 text-xs data-[state=active]:bg-primary data-[state=active]:text-primary-foreground"
-                  >
-                    Chia đều
-                  </TabsTrigger>
-                  <TabsTrigger
-                    value="fixed_price"
-                    disabled={vm.readOnly}
-                    className="h-7 text-xs data-[state=active]:bg-primary data-[state=active]:text-primary-foreground"
-                  >
-                    Thu cố định
-                  </TabsTrigger>
-                </TabsList>
-              </Tabs>
+              {vm.draft.sections.map((section, index) => (
+                <SettlementSectionCard
+                  key={section.id}
+                  index={index}
+                  section={section}
+                  onChange={(next) => handleSectionChange(index, next)}
+                  onRemove={
+                    vm.draft.sections.length > 1
+                      ? () => handleSectionRemove(index)
+                      : undefined
+                  }
+                  computed={vm.computed?.sections[index] ?? null}
+                  allPlayers={allPlayers}
+                  disabled={vm.readOnly}
+                />
+              ))}
 
-              {vm.draft.mode === "split_evenly" ? (
-                <SplitEvenlyPanel
-                  draft={vm.draft}
-                  onDraftChange={vm.setDraft}
-                  computed={vm.computed}
-                  disabled={vm.readOnly}
-                />
-              ) : (
-                <FixedPricePanel
-                  draft={vm.draft}
-                  onDraftChange={vm.setDraft}
-                  computed={vm.computed}
-                  disabled={vm.readOnly}
-                />
+              {!vm.readOnly && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="w-full rounded-full h-9 text-xs"
+                  onClick={handleAddSection}
+                >
+                  <Plus className="w-3.5 h-3.5 mr-1" />
+                  Thêm phần (đặt thêm giờ)
+                </Button>
               )}
+
+              {vm.computed && vm.computed.per_player.length > 0 && (
+                <div className="rounded-2xl border border-primary/30 bg-primary/5 overflow-hidden">
+                  <div className="px-3 py-2 border-b border-primary/20">
+                    <p className="text-xs font-semibold text-primary">Tổng cộng từng người</p>
+                  </div>
+                  <div className="divide-y divide-border/30">
+                    {vm.computed.per_player.map((p) => (
+                      <div key={p.id} className="px-3 py-2">
+                        <div className="flex justify-between text-xs">
+                          <span className="truncate font-medium">{p.name || `#${p.id}`}</span>
+                          <span className="font-bold tabular-nums text-primary">
+                            {formatVnd(p.amount)}
+                          </span>
+                        </div>
+                        {p.sections.length > 1 && (
+                          <p className="text-[10px] text-muted-foreground mt-0.5">
+                            {p.sections
+                              .map((s) => `${s.label}: ${formatVnd(s.amount)}`)
+                              .join(" · ")}
+                          </p>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                  <div className="px-3 py-2 bg-primary/10 border-t border-primary/20 space-y-1 text-xs">
+                    <div className="flex justify-between">
+                      <span>Tổng chi</span>
+                      <span className="font-semibold tabular-nums">
+                        {formatVnd(vm.computed.total_expense)}
+                      </span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span>Tổng thu</span>
+                      <span className="font-semibold tabular-nums text-primary">
+                        {formatVnd(vm.computed.revenue)}
+                      </span>
+                    </div>
+                    {vm.computed.total_expense > 0 && (
+                      <div className="flex justify-between text-[10px]">
+                        <span>So với chi</span>
+                        <span
+                          className={
+                            vm.computed.profit > 0
+                              ? "text-emerald-500 tabular-nums"
+                              : vm.computed.profit < 0
+                                ? "text-destructive tabular-nums"
+                                : "tabular-nums"
+                          }
+                        >
+                          {vm.computed.profit > 0 ? "+" : ""}
+                          {formatVnd(vm.computed.profit)}
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {vm.computed?.warnings.map((w) => (
+                <p key={w} className="text-[10px] text-amber-500/90">
+                  {w}
+                </p>
+              ))}
+              {vm.computed?.errors.map((e) => (
+                <p key={e} className="text-[10px] text-destructive">
+                  {e}
+                </p>
+              ))}
             </div>
           )}
         </div>

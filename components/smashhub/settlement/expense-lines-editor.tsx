@@ -10,7 +10,6 @@ import {
   applyExpenseLinePatch,
   newExpenseLine,
   type ExpenseLine,
-  type SettlementDraft,
 } from "@/lib/settlement/settlement-math"
 import {
   applyShuttleSettingsToLine,
@@ -27,19 +26,18 @@ import { ShuttleQuantityFields } from "./shuttle-quantity-fields"
 import { ShuttleSettingsSheet } from "./shuttle-settings-sheet"
 
 interface ExpenseLinesEditorProps {
-  draft: SettlementDraft
-  onDraftChange: (draft: SettlementDraft) => void
+  lines: ExpenseLine[]
+  onLinesChange: (lines: ExpenseLine[]) => void
   disabled?: boolean
   total: number
 }
 
-export function ExpenseLinesEditor({ draft, onDraftChange, disabled, total }: ExpenseLinesEditorProps) {
-  const lines = draft.expense_lines
+export function ExpenseLinesEditor({ lines, onLinesChange, disabled, total }: ExpenseLinesEditorProps) {
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [settingsLineId, setSettingsLineId] = useState<string | null>(null)
 
   const updateLines = (expense_lines: ExpenseLine[]) => {
-    onDraftChange({ ...draft, expense_lines })
+    onLinesChange(expense_lines)
   }
 
   const updateLine = (id: string, patch: Partial<ExpenseLine>) => {

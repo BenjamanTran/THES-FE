@@ -1,10 +1,11 @@
 "use client"
 
 import { useEffect, useMemo, useState } from "react"
-import { Loader2, Shuffle, Plus, X, AlertTriangle, RotateCcw, Star, Mars, Venus } from "lucide-react"
+import { Loader2, Shuffle, Plus, X, AlertTriangle, RotateCcw, Star, Mars, Venus, Search } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Card } from "@/components/ui/card"
+import { Input } from "@/components/ui/input"
 import {
   Sheet,
   SheetContent,
@@ -53,7 +54,11 @@ export function CreateMatchSheet({
   const [teamB, setTeamB] = useState<number[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [search, setSearch] = useState("")
   const teamSize = matchType === "singles" ? 1 : 2
+
+  const normalizeForSearch = (s: string) =>
+    s.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "")
 
   const matchCounts = useMemo(() => compositeFairnessCounts(players, matches), [players, matches])
 
@@ -61,9 +66,15 @@ export function CreateMatchSheet({
     (a.name || "").localeCompare(b.name || "", "vi")
 
   const assigned = new Set([...teamA, ...teamB])
+  const searchQuery = normalizeForSearch(search.trim())
   const available = players
     .filter((p) => !assigned.has(p.id))
+    .filter((p) => {
+      if (!searchQuery) return true
+      return normalizeForSearch(p.name || "").includes(searchQuery)
+    })
     .sort(sortByName)
+  const hasUnassigned = players.some((p) => !assigned.has(p.id))
 
   const addToTeam = (playerId: number, team: "a" | "b") => {
     if (team === "a" && teamA.length < teamSize) {
@@ -151,6 +162,7 @@ export function CreateMatchSheet({
 
   useEffect(() => {
     if (!open) return
+    setSearch("")
     if (editingMatch) {
       setTeamA(editingMatch.team_a.map((p) => p.id))
       setTeamB(editingMatch.team_b.map((p) => p.id))
@@ -170,6 +182,7 @@ export function CreateMatchSheet({
     setTeamB([])
     setError(null)
     setLoading(false)
+    setSearch("")
   }
 
   const handleClose = (v: boolean) => {
@@ -342,47 +355,60 @@ export function CreateMatchSheet({
             </Card>
           )}
 
-          {available.length > 0 && (teamA.length < teamSize || teamB.length < teamSize) && (
+          {hasUnassigned && (teamA.length < teamSize || teamB.length < teamSize) && (
             <div>
               <p className="text-xs text-muted-foreground mb-2">Chọn người chơi:</p>
-              <div className="space-y-2">
-                {available.map((p) => (
-                  <div key={p.id} className="flex items-center gap-2">
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      className="rounded-full text-xs h-7 px-2 flex-shrink-0"
-                      onClick={() => addToTeam(p.id, "a")}
-                      disabled={teamA.length >= teamSize}
-                    >
-                      A ←
-                    </Button>
-                    <div className="flex-1 min-w-0 flex items-center gap-1.5">
-                      <span className="text-xs font-medium truncate">{p.name || `#${p.id}`}</span>
-                      {p.gender && <GenderIcon gender={p.gender} size="sm" />}
-                      <SkillBadge level={sessionSkillTier(p)} size="xs" compact />
-                      {(() => {
-                        const stars = sessionSkillStars(p)
-                        if (stars == null) return null
-                        return (
-                          <span className="flex items-center gap-0.5 text-[10px] text-amber-400">
-                            {stars}<Star className="w-2.5 h-2.5 fill-amber-400 text-amber-400" />
-                          </span>
-                        )
-                      })()}
-                    </div>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      className="rounded-full text-xs h-7 px-2 flex-shrink-0"
-                      onClick={() => addToTeam(p.id, "b")}
-                      disabled={teamB.length >= teamSize}
-                    >
-                      → B
-                    </Button>
-                  </div>
-                ))}
+              <div className="relative mb-2">
+                <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
+                <Input
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  placeholder="Tìm người chơi theo tên..."
+                  className="pl-8 h-9 rounded-full"
+                />
               </div>
+              {available.length === 0 ? (
+                <p className="text-xs text-muted-foreground italic">Không tìm thấy người chơi nào.</p>
+              ) : (
+                <div className="space-y-2">
+                  {available.map((p) => (
+                    <div key={p.id} className="flex items-center gap-2">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="rounded-full text-sm h-10 min-w-10 px-3 flex-shrink-0"
+                        onClick={() => addToTeam(p.id, "a")}
+                        disabled={teamA.length >= teamSize}
+                      >
+                        A ←
+                      </Button>
+                      <div className="flex-1 min-w-0 flex items-center gap-1.5">
+                        <span className="text-xs font-medium truncate">{p.name || `#${p.id}`}</span>
+                        {p.gender && <GenderIcon gender={p.gender} size="sm" />}
+                        <SkillBadge level={sessionSkillTier(p)} size="xs" compact />
+                        {(() => {
+                          const stars = sessionSkillStars(p)
+                          if (stars == null) return null
+                          return (
+                            <span className="flex items-center gap-0.5 text-[10px] text-amber-400">
+                              {stars}<Star className="w-2.5 h-2.5 fill-amber-400 text-amber-400" />
+                            </span>
+                          )
+                        })()}
+                      </div>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="rounded-full text-sm h-10 min-w-10 px-3 flex-shrink-0"
+                        onClick={() => addToTeam(p.id, "b")}
+                        disabled={teamB.length >= teamSize}
+                      >
+                        → B
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           )}
 
