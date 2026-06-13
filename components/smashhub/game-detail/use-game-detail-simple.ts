@@ -24,6 +24,7 @@ import { useAuth, useRequireAuth } from "@/lib/auth-context"
 import { reverseGeocode } from "@/lib/geocode"
 import { useGameCable } from "@/hooks/use-game-cable"
 import type { GameCableEvent } from "@/lib/game-cable"
+import { getGamePrimaryActionKind } from "@/lib/game-primary-action"
 
 function playedCount(player: GamePlayer): number {
   return player.session_matches?.played ?? 0
@@ -180,40 +181,41 @@ export function useGameDetailSimple(gameId: number | null, onClose: () => void) 
 
   const primaryAction = useMemo(() => {
     if (!game) return null
-    if (game.status === "cancelled" || game.status === "finished" || isPast) return null
-    if (game.status === "ongoing") return null
 
-    if (isHost) {
-      return {
-        label: "Huỷ trận",
-        icon: XCircle,
-        variant: "destructive" as const,
-        onClick: handleLeave,
-      }
-    }
-    if (isParticipant) {
-      return {
-        label: "Rời trận",
-        icon: LogOut,
-        variant: "outline" as const,
-        onClick: handleLeave,
-        destructive: true,
-      }
-    }
-    if (game.status === "full") {
-      return {
-        label: "Đã đầy",
-        icon: Users,
-        variant: "secondary" as const,
-        disabled: true,
-        onClick: () => {},
-      }
-    }
-    return {
-      label: "Tham gia",
-      icon: CheckCircle2,
-      variant: "default" as const,
-      onClick: handleJoin,
+    const action = getGamePrimaryActionKind({ game, isHost, isParticipant, isPast })
+    switch (action) {
+      case "cancel":
+        return {
+          label: "Huỷ trận",
+          icon: XCircle,
+          variant: "destructive" as const,
+          onClick: handleLeave,
+        }
+      case "leave":
+        return {
+          label: "Rời trận",
+          icon: LogOut,
+          variant: "outline" as const,
+          onClick: handleLeave,
+          destructive: true,
+        }
+      case "full":
+        return {
+          label: "Đã đầy",
+          icon: Users,
+          variant: "secondary" as const,
+          disabled: true,
+          onClick: () => {},
+        }
+      case "join":
+        return {
+          label: "Tham gia",
+          icon: CheckCircle2,
+          variant: "default" as const,
+          onClick: handleJoin,
+        }
+      default:
+        return null
     }
   }, [game, isHost, isParticipant, isPast, handleJoin, handleLeave])
 

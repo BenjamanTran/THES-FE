@@ -221,13 +221,17 @@ export function sessionMatchCountsFromPlayers(
 }
 
 /**
- * Legacy player list match count / W-L: derived from finished matches + ongoing on court.
- * Ignores manual session_played_count (simple UI only). Pending queue excluded.
+ * Legacy player list match count / W-L. Prefer API session stats because detail payload
+ * only includes live/pending matches until the finished tab is loaded.
  */
 export function computePlayerDisplayCounts(
-  players: { id: number }[],
+  players: { id: number; session_matches?: PlayerSessionStats }[],
   matches: MatchSummary[] | undefined,
 ): Record<number, PlayerSessionStats> {
+  if (players.some((p) => p.session_matches)) {
+    return sessionMatchCountsFromPlayers(players)
+  }
+
   const fromFinished = computePlayerMatchCounts(matches)
   const counts: Record<number, PlayerSessionStats> = {}
 

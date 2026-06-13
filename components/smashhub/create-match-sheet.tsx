@@ -65,16 +65,29 @@ export function CreateMatchSheet({
   const sortByName = (a: GamePlayer, b: GamePlayer) =>
     (a.name || "").localeCompare(b.name || "", "vi")
 
+  const busyPlayerIds = useMemo(() => {
+    if (!isEdit) return new Set<number>()
+    const editingMatchId = editingMatch?.id ?? null
+    return new Set(
+      matches
+        .filter((m) => m.status === "ongoing" && m.id !== editingMatchId)
+        .flatMap((m) => [...m.team_a, ...m.team_b].map((p) => p.id)),
+    )
+  }, [isEdit, matches, editingMatch?.id])
+  const eligiblePlayers = useMemo(
+    () => players.filter((p) => !busyPlayerIds.has(p.id)),
+    [players, busyPlayerIds],
+  )
   const assigned = new Set([...teamA, ...teamB])
   const searchQuery = normalizeForSearch(search.trim())
-  const available = players
+  const available = eligiblePlayers
     .filter((p) => !assigned.has(p.id))
     .filter((p) => {
       if (!searchQuery) return true
       return normalizeForSearch(p.name || "").includes(searchQuery)
     })
     .sort(sortByName)
-  const hasUnassigned = players.some((p) => !assigned.has(p.id))
+  const hasUnassigned = eligiblePlayers.some((p) => !assigned.has(p.id))
 
   const addToTeam = (playerId: number, team: "a" | "b") => {
     if (team === "a" && teamA.length < teamSize) {
@@ -91,7 +104,7 @@ export function CreateMatchSheet({
 
   const genderModeError = (mode: DoublesGenderMode): string | null => {
     if (mode === "any") return null
-    const eligible = players
+    const eligible = eligiblePlayers
     const males = eligible.filter((p) => p.gender === "male").length
     const females = eligible.filter((p) => p.gender === "female").length
     if (mode === "mens" && males < 4) return "Cần ít nhất 4 nam để chia đôi nam"
@@ -118,7 +131,7 @@ export function CreateMatchSheet({
     const current = { teamA, teamB }
 
     if (isFull || !hasPartial) {
-      const eligible = players
+      const eligible = eligiblePlayers
       const result = balanceTeams(eligible, teamSize, matchCounts, genderMode, 0, current)
       if (result.teamA.length < teamSize || result.teamB.length < teamSize) {
         setError(genderModeError(genderMode) || "Không đủ người chơi phù hợp để chia đội")
@@ -128,7 +141,7 @@ export function CreateMatchSheet({
       setTeamB(result.teamB)
     } else {
       const locked = new Set([...teamA, ...teamB])
-      const candidates = players.filter((p) => !locked.has(p.id))
+      const candidates = eligiblePlayers.filter((p) => !locked.has(p.id))
       const result = fillSlots(
         teamA,
         teamB,

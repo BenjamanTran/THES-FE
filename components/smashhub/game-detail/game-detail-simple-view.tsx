@@ -40,7 +40,7 @@ import type { GameDetailSimpleViewModel } from "./use-game-detail-simple"
 import type { GamePlayer, Gender } from "@/lib/api"
 
 function playerTier(player: GamePlayer): string | null {
-  return sessionSkillTier(player)
+  return sessionSkillTier(player) ?? player.declared_rank?.tier ?? null
 }
 
 function playedCount(player: GamePlayer): number {

@@ -251,6 +251,8 @@ export interface Venue {
 }
 
 export interface UpdateGameSettingsParams {
+  start_time?: string
+  end_time?: string
   max_players?: number
   courts?: number[]
   /** null or omit with "unlimited" = no cap; positive integer = max pair-arranged matches */

@@ -40,6 +40,7 @@ import {
   applyLiveMatchCountDeltas,
   maxSessionPlayed,
   computePlayerDisplayCounts,
+  adjustSessionStatsForFinishedMatch,
 } from "@/lib/match-stats"
 import {
   canAddPendingMatch,
@@ -65,6 +66,7 @@ import { suggestPairDoublesMatch } from "@/lib/player-pairs"
 import { useGameCable } from "@/hooks/use-game-cable"
 import type { GameCableEvent } from "@/lib/game-cable"
 import { reverseGeocode } from "@/lib/geocode"
+import { getGamePrimaryActionKind } from "@/lib/game-primary-action"
 import {
   hasEnoughArrivedPlayers,
   minPlayersForMatchType,
@@ -79,6 +81,13 @@ import {
 import { fitMeta } from "./meta"
 import { COURT_OPTIONS, MAX_CO_HOSTS, UNDO_MS } from "@/components/smashhub/game-detail/constants"
 import { useGamePlayerPairTap } from "@/components/smashhub/game-detail/game-player-pairs"
+
+function toDatetimeLocalValue(value: string): string {
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return ""
+  const offsetMs = date.getTimezoneOffset() * 60_000
+  return new Date(date.getTime() - offsetMs).toISOString().slice(0, 16)
+}
 
 function mergePriorityIntoMatches(data: GameDetail): GameDetail {
   const matches = [...(data.matches ?? [])]
@@ -116,6 +125,8 @@ export function useGameDetail(gameId: number | null, onClose: () => void) {
   const [showEditSettings, setShowEditSettings] = useState(false)
   const [editCourts, setEditCourts] = useState<number[]>([])
   const [editMaxPlayers, setEditMaxPlayers] = useState(8)
+  const [editStartTime, setEditStartTime] = useState("")
+  const [editEndTime, setEditEndTime] = useState("")
   const [settingsSaving, setSettingsSaving] = useState(false)
   const [settingsError, setSettingsError] = useState<string | null>(null)
   const [showPlaceholderSheet, setShowPlaceholderSheet] = useState(false)
@@ -427,48 +438,50 @@ export function useGameDetail(gameId: number | null, onClose: () => void) {
 
   const primaryAction = useMemo(() => {
     if (!game) return null
-    if (game.status === "cancelled" || game.status === "finished" || isPast) return null
 
-    if (game.status === "ongoing") return null
-
-    if (isHost) {
-      return {
-        label: "Huỷ trận",
-        icon: XCircle,
-        variant: "destructive" as const,
-        onClick: handleLeave,
-      }
+    const action = getGamePrimaryActionKind({ game, isHost, isParticipant, isPast })
+    switch (action) {
+      case "cancel":
+        return {
+          label: "Huỷ trận",
+          icon: XCircle,
+          variant: "destructive" as const,
+          onClick: handleLeave,
+        }
+      case "leave":
+        return {
+          label: "Rời trận",
+          icon: LogOut,
+          variant: "outline" as const,
+          onClick: handleLeave,
+          destructive: true,
+        }
+      case "full":
+        return {
+          label: "Đã đầy",
+          icon: Users,
+          variant: "secondary" as const,
+          disabled: true,
+          onClick: () => {},
+        }
+      case "join":
+        return {
+          label: "Tham gia",
+          icon: CheckCircle2,
+          variant: "default" as const,
+          onClick: handleJoin,
+        }
+      default:
+        return null
     }
-    if (isParticipant) {
-      return {
-        label: "Rời trận",
-        icon: LogOut,
-        variant: "outline" as const,
-        onClick: handleLeave,
-        destructive: true,
-      }
-    }
-    if (game.status === "full") {
-      return {
-        label: "Đã đầy",
-        icon: Users,
-        variant: "secondary" as const,
-        disabled: true,
-        onClick: () => {},
-      }
-    }
-    return {
-      label: "Tham gia",
-      icon: CheckCircle2,
-      variant: "default" as const,
-      onClick: handleJoin,
-    }
-  }, [game, isHost, isParticipant, isPast])
+  }, [game, isHost, isParticipant, isPast, handleJoin, handleLeave])
 
   const openEditSettings = () => {
     if (!game) return
     setEditCourts(game.courts?.length ? [...game.courts] : [1])
     setEditMaxPlayers(game.max_players)
+    setEditStartTime(toDatetimeLocalValue(game.start_time))
+    setEditEndTime(toDatetimeLocalValue(game.end_time))
     setSettingsError(null)
     setShowEditSettings(true)
   }
@@ -483,10 +496,23 @@ export function useGameDetail(gameId: number | null, onClose: () => void) {
 
   const handleSaveSettings = async () => {
     if (!game) return
+    const start = new Date(editStartTime)
+    const end = new Date(editEndTime)
+    if (!editStartTime || !editEndTime || Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) {
+      setSettingsError("Vui lòng chọn giờ bắt đầu và kết thúc")
+      return
+    }
+    if (start >= end) {
+      setSettingsError("Giờ bắt đầu phải trước giờ kết thúc")
+      return
+    }
+
     setSettingsSaving(true)
     setSettingsError(null)
     try {
       const updated = await updateGameSettings(game.id, {
+        start_time: start.toISOString(),
+        end_time: end.toISOString(),
         courts: editCourts,
         max_players: editMaxPlayers,
       })
@@ -564,6 +590,7 @@ export function useGameDetail(gameId: number | null, onClose: () => void) {
     setGame((prev) => {
       if (!prev) return prev
       const prevMatches = prev.matches ?? []
+      const previousMatch = prevMatches.find((m) => m.id === updated.id)
       const hasMatch = prevMatches.some((m) => m.id === updated.id)
       const merged = hasMatch
         ? prevMatches.map((m) => {
@@ -577,8 +604,22 @@ export function useGameDetail(gameId: number | null, onClose: () => void) {
           ? merged.map((m) => (m.id === updated.id ? m : { ...m, priority: false }))
           : merged
       const next = syncGameMatches(prev, nextMatches)
+      let nextPlayers = next.players
+      if (previousMatch?.status === "finished" && updated.status !== "finished") {
+        nextPlayers = adjustSessionStatsForFinishedMatch(nextPlayers, previousMatch, -1)
+      } else if (previousMatch && previousMatch.status !== "finished" && updated.status === "finished") {
+        nextPlayers = adjustSessionStatsForFinishedMatch(nextPlayers, updated, 1)
+      } else if (
+        previousMatch?.status === "finished" &&
+        updated.status === "finished" &&
+        previousMatch.winner_team !== updated.winner_team
+      ) {
+        nextPlayers = adjustSessionStatsForFinishedMatch(nextPlayers, previousMatch, -1)
+        nextPlayers = adjustSessionStatsForFinishedMatch(nextPlayers, updated, 1)
+      }
       return {
         ...next,
+        players: nextPlayers,
         priority_match:
           updated.priority && updated.status === "pending"
             ? updated
@@ -1306,6 +1347,10 @@ export function useGameDetail(gameId: number | null, onClose: () => void) {
     setShowEditSettings,
     editCourts,
     editMaxPlayers,
+    editStartTime,
+    editEndTime,
+    setEditStartTime,
+    setEditEndTime,
     setEditMaxPlayers,
     settingsSaving,
     settingsError,

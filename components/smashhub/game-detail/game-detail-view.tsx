@@ -58,6 +58,7 @@ import { cn } from "@/lib/utils"
 import { format } from "date-fns"
 import { vi } from "date-fns/locale"
 import { sessionSkillStars, sessionSkillTier } from "@/lib/player-session-skill"
+import { ratingToStars } from "@/lib/rating-stars"
 import { formatPriceRange } from "@/lib/format"
 import { generateFbPost, statusMeta } from "./meta"
 import { MAX_CO_HOSTS } from "@/components/smashhub/game-detail/constants"
@@ -67,8 +68,22 @@ import { GameRatingSheet } from "@/components/smashhub/game-detail/game-rating-s
 import { GamePlayerPairs } from "@/components/smashhub/game-detail/game-player-pairs"
 import { PlayerRowActionsMenu, type PlayerRowAction } from "@/components/smashhub/game-detail/player-row-actions-menu"
 import { partnerIdFor, pairsFromGame } from "@/lib/player-pairs"
+import type { GamePlayer } from "@/lib/api"
 
 export type { GameDetailViewModel }
+
+type DisplaySkillPlayer = Pick<GamePlayer, "declared_rank" | "host_rated_tier" | "host_rated_stars">
+
+function displaySkillTier(player: DisplaySkillPlayer) {
+  return player.host_rated_tier ?? player.declared_rank?.tier ?? null
+}
+
+function displaySkillStars(player: DisplaySkillPlayer) {
+  return sessionSkillStars(player) ??
+    (player.declared_rank
+      ? ratingToStars(player.declared_rank.tier, player.declared_rank.rating)
+      : null)
+}
 
 export function GameDetailView({ vm }: { vm: GameDetailViewModel }) {
   const { theme, setTheme } = useAppTheme()
@@ -113,6 +128,10 @@ export function GameDetailView({ vm }: { vm: GameDetailViewModel }) {
     setShowEditSettings,
     editCourts,
     editMaxPlayers,
+    editStartTime,
+    editEndTime,
+    setEditStartTime,
+    setEditEndTime,
     setEditMaxPlayers,
     settingsSaving,
     settingsError,
@@ -315,18 +334,34 @@ export function GameDetailView({ vm }: { vm: GameDetailViewModel }) {
               </Card>
 
               <Card className="order-10 p-4 rounded-2xl border-border/50">
-                <div className="flex items-center gap-3 text-sm">
-                  <Calendar className="w-4 h-4 text-primary flex-shrink-0" />
-                  <span className="font-medium capitalize">
-                    {format(new Date(game.start_time), "EEEE, dd/MM/yyyy", { locale: vi })}
-                  </span>
-                </div>
-                <div className="flex items-center gap-3 text-sm mt-2">
-                  <Clock className="w-4 h-4 text-primary flex-shrink-0" />
-                  <span className="font-medium">
-                    {format(new Date(game.start_time), "HH:mm")} –{" "}
-                    {format(new Date(game.end_time), "HH:mm")}
-                  </span>
+                <div className="flex items-start justify-between gap-2">
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-3 text-sm">
+                      <Calendar className="w-4 h-4 text-primary flex-shrink-0" />
+                      <span className="font-medium capitalize">
+                        {format(new Date(game.start_time), "EEEE, dd/MM/yyyy", { locale: vi })}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-3 text-sm">
+                      <Clock className="w-4 h-4 text-primary flex-shrink-0" />
+                      <span className="font-medium">
+                        {format(new Date(game.start_time), "HH:mm")} –{" "}
+                        {format(new Date(game.end_time), "HH:mm")}
+                      </span>
+                    </div>
+                  </div>
+                  {canEditSettings && (
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="ghost"
+                      className="h-7 px-2 rounded-lg text-[10px] gap-1 flex-shrink-0"
+                      onClick={openEditSettings}
+                    >
+                      <Pencil className="w-3 h-3" />
+                      Sửa
+                    </Button>
+                  )}
                 </div>
               </Card>
 
@@ -702,10 +737,10 @@ export function GameDetailView({ vm }: { vm: GameDetailViewModel }) {
                             )}
                           </p>
                           <div className="flex items-center gap-1.5 mt-0.5">
-                            <SkillBadge level={sessionSkillTier(player)} size="xs" compact />
+                            <SkillBadge level={displaySkillTier(player)} size="xs" compact />
                             {(() => {
-                              const stars = sessionSkillStars(player)
-                              const tier = sessionSkillTier(player)
+                              const stars = displaySkillStars(player)
+                              const tier = displaySkillTier(player)
                               if (!tier || stars == null) return null
                               return (
                                 <span className="flex items-center gap-0.5 text-[10px] text-amber-400">
@@ -1084,6 +1119,20 @@ export function GameDetailView({ vm }: { vm: GameDetailViewModel }) {
                   })}
                 </DropdownMenuContent>
               </DropdownMenu>
+            ) : primaryAction ? (
+              <Button
+                className="flex-1 rounded-full"
+                variant={primaryAction.variant}
+                disabled={primaryAction.disabled || actionLoading}
+                onClick={() => void primaryAction.onClick()}
+              >
+                {actionLoading ? (
+                  <Loader2 className="w-4 h-4 animate-spin mr-1" />
+                ) : (
+                  <primaryAction.icon className="w-4 h-4 mr-1" />
+                )}
+                {primaryAction.label}
+              </Button>
             ) : (
               <Button variant="outline" className="flex-1 rounded-full" disabled>
                 <MessageCircle className="w-4 h-4 mr-1" />
@@ -1151,6 +1200,10 @@ export function GameDetailView({ vm }: { vm: GameDetailViewModel }) {
         courtOptions={COURT_OPTIONS}
         editCourts={editCourts}
         editMaxPlayers={editMaxPlayers}
+        editStartTime={editStartTime}
+        editEndTime={editEndTime}
+        onEditStartTimeChange={setEditStartTime}
+        onEditEndTimeChange={setEditEndTime}
         onEditMaxPlayersChange={setEditMaxPlayers}
         game={game}
         settingsError={settingsError}

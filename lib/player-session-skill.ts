@@ -1,6 +1,10 @@
 import type { GamePlayer, MatchPlayer, Tier } from "./api"
+import { ratingToStars } from "./rating-stars"
 
-type SessionSkillFields = Pick<GamePlayer, "host_rated_tier" | "host_rated_stars">
+type SessionSkillFields = Pick<
+  GamePlayer,
+  "host_rated_tier" | "host_rated_stars" | "declared_rank" | "rank"
+>
 
 export function hasHostSessionSkill(
   player: SessionSkillFields | null | undefined,
@@ -8,15 +12,17 @@ export function hasHostSessionSkill(
   return player?.host_rated_tier != null && player.host_rated_stars != null
 }
 
-/** In-game skill badge tier — host session rating only. */
+/** In-game skill badge tier — host session rating first, self-declared/stored rank fallback. */
 export function sessionSkillTier(player: SessionSkillFields | null | undefined): Tier | null {
-  return player?.host_rated_tier ?? null
+  return player?.host_rated_tier ?? player?.declared_rank?.tier ?? player?.rank?.tier ?? null
 }
 
-/** In-game skill stars — host session rating only. */
+/** In-game skill stars — host session rating first, self-declared/stored rank fallback. */
 export function sessionSkillStars(player: SessionSkillFields | null | undefined): number | null {
-  if (!hasHostSessionSkill(player)) return null
-  return player.host_rated_stars
+  if (hasHostSessionSkill(player)) return player.host_rated_stars
+  const fallback = player?.declared_rank ?? player?.rank
+  if (!fallback) return null
+  return ratingToStars(fallback.tier, fallback.rating)
 }
 
 /** Resolve session skill from match roster entry + game player list. */

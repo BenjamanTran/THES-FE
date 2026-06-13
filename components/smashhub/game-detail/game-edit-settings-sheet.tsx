@@ -2,6 +2,7 @@
 
 import { Loader2, Minus, Plus } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet"
 import type { GameDetail } from "@/lib/api"
@@ -12,6 +13,10 @@ interface GameEditSettingsSheetProps {
   courtOptions: number[]
   editCourts: number[]
   editMaxPlayers: number
+  editStartTime: string
+  editEndTime: string
+  onEditStartTimeChange: (value: string) => void
+  onEditEndTimeChange: (value: string) => void
   onEditMaxPlayersChange: (value: number | ((prev: number) => number)) => void
   game: GameDetail | null
   settingsError: string | null
@@ -26,6 +31,10 @@ export function GameEditSettingsSheet({
   courtOptions,
   editCourts,
   editMaxPlayers,
+  editStartTime,
+  editEndTime,
+  onEditStartTimeChange,
+  onEditEndTimeChange,
   onEditMaxPlayersChange,
   game,
   settingsError,
@@ -37,9 +46,39 @@ export function GameEditSettingsSheet({
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent side="bottom" className="rounded-t-3xl max-w-md mx-auto">
         <SheetHeader>
-          <SheetTitle className="text-base">Sửa sân & số người</SheetTitle>
+          <SheetTitle className="text-base">Sửa giờ, sân & số người</SheetTitle>
         </SheetHeader>
         <div className="space-y-5 pt-4 pb-6">
+          <div className="space-y-2">
+            <Label className="text-xs font-semibold">Thời gian chơi</Label>
+            <div className="grid grid-cols-1 gap-3">
+              <div className="space-y-1.5">
+                <Label htmlFor="game-start-time" className="text-[10px] text-muted-foreground">
+                  Bắt đầu
+                </Label>
+                <Input
+                  id="game-start-time"
+                  type="datetime-local"
+                  value={editStartTime}
+                  onChange={(e) => onEditStartTimeChange(e.target.value)}
+                  className="rounded-xl"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="game-end-time" className="text-[10px] text-muted-foreground">
+                  Kết thúc
+                </Label>
+                <Input
+                  id="game-end-time"
+                  type="datetime-local"
+                  value={editEndTime}
+                  onChange={(e) => onEditEndTimeChange(e.target.value)}
+                  className="rounded-xl"
+                />
+              </div>
+            </div>
+          </div>
+
           <div className="space-y-2">
             <Label className="text-xs font-semibold">Chọn sân (bấm để bật/tắt)</Label>
             <div className="grid grid-cols-4 gap-2">
