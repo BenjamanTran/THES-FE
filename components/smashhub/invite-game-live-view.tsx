@@ -11,6 +11,7 @@ import type { InviteGameInfo, InviteLiveMatch, InviteLivePlayer } from "@/lib/ap
 import { playerDisplayName } from "@/lib/player-display-name"
 import { resolveDisplayCourtNumber } from "@/lib/match-court-display"
 import { cn } from "@/lib/utils"
+import { formatStars } from "./star-rating"
 
 interface InviteGameLiveViewProps {
   game: InviteGameInfo
@@ -230,7 +231,7 @@ export function InviteGameLiveView({
                     <SkillBadge level={tier ?? null} size="xs" compact />
                     {tier && stars != null ? (
                       <span className="flex items-center gap-0.5 text-[10px] text-amber-500 font-semibold tabular-nums">
-                        {stars}
+                        {formatStars(stars)}
                         <Star className="w-2.5 h-2.5 fill-amber-500 text-amber-500" />
                       </span>
                     ) : null}

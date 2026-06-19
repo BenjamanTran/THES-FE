@@ -15,6 +15,7 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sh
 import { SkillBadge, SKILL_LABELS, type SkillLevel } from "../skill-badge"
 import type { GamePlayer, Tier } from "@/lib/api"
 import { ratingToStars } from "@/lib/rating-stars"
+import { formatStars, StarRating } from "../star-rating"
 
 interface GameRatingSheetProps {
   open: boolean
@@ -57,7 +58,7 @@ export function GameRatingSheet({
               <span>Tự khai:</span>
               <SkillBadge level={player.declared_rank.tier} size="xs" compact />
               <span className="flex items-center gap-0.5 text-amber-400">
-                {ratingToStars(player.declared_rank.tier, player.declared_rank.rating)}
+                {formatStars(ratingToStars(player.declared_rank.tier, player.declared_rank.rating))}
                 <Star className="w-2.5 h-2.5 fill-amber-400 text-amber-400" />
               </span>
             </div>
@@ -80,25 +81,21 @@ export function GameRatingSheet({
           </div>
 
           <div className="space-y-1.5">
-            <Label className="text-xs">Số sao (1–5)</Label>
-            <div className="flex items-center gap-1">
-              {[1, 2, 3, 4, 5].map((s) => (
-                <button
-                  key={s}
-                  type="button"
-                  onClick={() => onRateStarsChange(s)}
-                  className="p-1 transition-colors"
-                >
-                  <Star
-                    className={`w-6 h-6 ${
-                      s <= rateStars
-                        ? "fill-amber-400 text-amber-400"
-                        : "text-muted-foreground/40"
-                    }`}
-                  />
-                </button>
-              ))}
+            <div className="flex items-center justify-between gap-3">
+              <Label htmlFor="rate-stars" className="text-xs">Số sao</Label>
+              <StarRating value={rateStars} sizeClassName="h-4 w-4" showValue />
             </div>
+            <Input
+              id="rate-stars"
+              type="range"
+              min={0.5}
+              max={5}
+              step={0.5}
+              value={rateStars}
+              onChange={(e) => onRateStarsChange(Number(e.target.value))}
+              aria-label={`Số sao ${formatStars(rateStars)}`}
+              className="h-2 cursor-pointer rounded-full p-0 accent-amber-400"
+            />
           </div>
 
           <div className="space-y-1.5">

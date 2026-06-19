@@ -1,11 +1,12 @@
 "use client"
 
-import { Camera, Edit2, Star } from "lucide-react"
+import { Camera, Edit2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { UserAvatar } from "../user-avatar"
 import { SkillBadge } from "../skill-badge"
 import { ratingToStars } from "@/lib/rating-stars"
 import type { AuthUser } from "@/lib/api"
+import { StarRating } from "../star-rating"
 
 interface ProfileHeaderProps {
   user: AuthUser
@@ -46,18 +47,7 @@ export function ProfileHeader({ user, onEdit, onEditAvatar }: ProfileHeaderProps
               <SkillBadge level={declaredRank.tier} size="sm" />
               <div className="flex items-center gap-1.5 mt-1">
                 <p className="text-[11px] text-muted-foreground">{declaredRank.display_name}</p>
-                <div className="flex gap-0.5">
-                  {[1, 2, 3, 4, 5].map((s) => (
-                    <Star
-                      key={s}
-                      className={`w-3 h-3 ${
-                        s <= ratingToStars(declaredRank.tier, declaredRank.rating)
-                          ? "fill-amber-400 text-amber-400"
-                          : "text-muted-foreground/30"
-                      }`}
-                    />
-                  ))}
-                </div>
+                <StarRating value={ratingToStars(declaredRank.tier, declaredRank.rating)} sizeClassName="h-3 w-3" />
               </div>
             </>
           ) : (

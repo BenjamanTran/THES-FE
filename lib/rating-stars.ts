@@ -29,12 +29,12 @@ export const TIER_RANGES: Record<string, [number, number]> = Object.fromEntries(
 
 export function ratingFromTierAndStars(tier: string, stars: number): number {
   const base = TIER_BASE[tier] ?? 0
-  const s = Math.max(1, Math.min(5, stars))
-  return base + (s - 1) * STAR_STEP
+  const s = Math.max(0.5, Math.min(5, stars))
+  return Math.round(base + (s - 1) * STAR_STEP)
 }
 
 export function ratingToStars(tier: string, rating: number): number {
   const base = TIER_BASE[tier] ?? 0
   const offset = Math.max(rating - base, 0)
-  return Math.max(1, Math.min(5, Math.floor(offset / STAR_STEP) + 1))
+  return Math.max(0.5, Math.min(5, Math.round((offset / STAR_STEP + 1) * 100) / 100))
 }

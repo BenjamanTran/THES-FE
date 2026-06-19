@@ -1,12 +1,13 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { Loader2, Star } from "lucide-react"
+import { Loader2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet"
 import { SKILL_LABELS, type SkillLevel } from "./skill-badge"
+import { StarRating, formatStars } from "./star-rating"
 import {
   createPlaceholder,
   updatePlaceholder,
@@ -51,7 +52,7 @@ export function PlaceholderPlayerSheet({
   const [name, setName] = useState("")
   const [gender, setGender] = useState<Gender>("male")
   const [tier, setTier] = useState<Tier>("intermediate")
-  const [stars, setStars] = useState(3)
+  const [stars, setStars] = useState(2.5)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -61,7 +62,7 @@ export function PlaceholderPlayerSheet({
     setGender((player?.gender as Gender) || "male")
     if (!player) {
       setTier("intermediate")
-      setStars(3)
+      setStars(2.5)
     }
     setError(null)
   }, [open, player])
@@ -157,23 +158,21 @@ export function PlaceholderPlayerSheet({
               </div>
 
               <div className="space-y-1.5">
-                <Label className="text-xs">Số sao (1–5)</Label>
-                <div className="flex gap-1">
-                  {[1, 2, 3, 4, 5].map((s) => (
-                    <button
-                      key={s}
-                      type="button"
-                      onClick={() => setStars(s)}
-                      className="p-1 transition-colors"
-                    >
-                      <Star
-                        className={`w-6 h-6 ${
-                          s <= stars ? "fill-amber-400 text-amber-400" : "text-muted-foreground/40"
-                        }`}
-                      />
-                    </button>
-                  ))}
+                <div className="flex items-center justify-between gap-3">
+                  <Label htmlFor="ph-stars" className="text-xs">Số sao</Label>
+                  <StarRating value={stars} sizeClassName="h-4 w-4" showValue />
                 </div>
+                <Input
+                  id="ph-stars"
+                  type="range"
+                  min={0.5}
+                  max={5}
+                  step={0.5}
+                  value={stars}
+                  onChange={(e) => setStars(Number(e.target.value))}
+                  aria-label={`Số sao ${formatStars(stars)}`}
+                  className="h-2 cursor-pointer rounded-full p-0 accent-amber-400"
+                />
               </div>
             </>
           )}

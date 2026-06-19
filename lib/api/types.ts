@@ -71,10 +71,42 @@ export interface RecentActivityResponse {
   next_offset: number
 }
 
+export type SkillRadarAxisKey =
+  | "attack"
+  | "defense"
+  | "technique"
+  | "agility"
+  | "footwork"
+  | "stamina"
+
+export interface SkillRadarAxis {
+  key: SkillRadarAxisKey
+  label: string
+  score: number
+}
+
+export interface SkillRadarSnapshot {
+  month: string
+  overall_score: number
+  declared_tier: Tier
+  computed_stars: number
+  declared_rating: number
+  axes: SkillRadarAxis[]
+}
+
+export type SkillScores = Record<SkillRadarAxisKey, number>
+
+export interface UpdateSkillProfileParams {
+  tier: Tier
+  scores: SkillScores
+}
+
 export interface UserProfile {
   achievements: Achievement[]
   recent_activity: RecentActivityItem[]
   recent_activity_has_more?: boolean
+  skill_radar?: SkillRadarSnapshot | null
+  skill_history?: SkillRadarSnapshot[]
 }
 
 export interface ParticipantSummary {
@@ -292,8 +324,6 @@ export interface UpdateProfileParams {
   name?: string
   gender?: Gender
   phone?: string
-  tier?: Tier
-  stars?: number
 }
 
 export type GameDetailScreenVariant = "legacy" | "simple"

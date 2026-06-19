@@ -1,7 +1,7 @@
 "use client"
 
 import { useState } from "react"
-import { Loader2, Star } from "lucide-react"
+import { Loader2 } from "lucide-react"
 import {
   Sheet,
   SheetContent,
@@ -13,9 +13,11 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { useAuth } from "@/lib/auth-context"
+import type { Gender, SkillRadarAxisKey, SkillScores, Tier } from "@/lib/api"
 import { SKILL_LABELS, type SkillLevel } from "./skill-badge"
-import type { Gender, Tier } from "@/lib/api"
-import { ratingToStars } from "@/lib/rating-stars"
+import { computedStarsFromScores, overallScoreFromScores, scoresFromRadar } from "@/lib/skill-radar"
+import { formatStars, StarRating } from "./star-rating"
+import { InteractiveSkillRadar } from "./profile/interactive-skill-radar"
 
 interface EditProfileSheetProps {
   open: boolean
@@ -41,17 +43,20 @@ const TIER_ORDER: Tier[] = [
 ]
 
 export function EditProfileSheet({ open, onOpenChange }: EditProfileSheetProps) {
-  const { user, updateProfile } = useAuth()
+  const { user, updateProfile, updateSkillProfile } = useAuth()
   const [name, setName] = useState(user?.name ?? "")
   const [phone, setPhone] = useState(user?.phone ?? "")
   const [gender, setGender] = useState<Gender>(user?.gender ?? "unspecified")
-  const declared = user?.declared_rank ?? user?.rank
-  const [tier, setTier] = useState<Tier>(declared?.tier ?? "newbie")
-  const [stars, setStars] = useState(() => {
-    return declared ? ratingToStars(declared.tier, declared.rating) : 3
-  })
+  const [skillScores, setSkillScores] = useState<SkillScores>(() =>
+    scoresFromRadar(user?.profile?.skill_radar?.axes),
+  )
+  const [tier, setTier] = useState<Tier>(
+    user?.profile?.skill_radar?.declared_tier ?? user?.declared_rank?.tier ?? user?.rank?.tier ?? "newbie",
+  )
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const computedStars = computedStarsFromScores(skillScores)
+  const overallScore = overallScoreFromScores(skillScores)
 
   // Reset local state whenever the sheet is reopened.
   const handleOpenChange = (next: boolean) => {
@@ -59,9 +64,8 @@ export function EditProfileSheet({ open, onOpenChange }: EditProfileSheetProps) 
       setName(user.name)
       setPhone(user.phone ?? "")
       setGender(user.gender ?? "unspecified")
-      const d = user.declared_rank ?? user.rank
-      setTier(d?.tier ?? "newbie")
-      setStars(d ? ratingToStars(d.tier, d.rating) : 3)
+      setSkillScores(scoresFromRadar(user.profile?.skill_radar?.axes))
+      setTier(user.profile?.skill_radar?.declared_tier ?? user.declared_rank?.tier ?? user.rank?.tier ?? "newbie")
       setError(null)
     }
     onOpenChange(next)
@@ -78,15 +82,21 @@ export function EditProfileSheet({ open, onOpenChange }: EditProfileSheetProps) 
         name: name.trim(),
         gender,
         phone: phone.trim(),
-        tier,
-        stars,
       })
+      await updateSkillProfile({ tier, scores: skillScores })
       onOpenChange(false)
     } catch (err) {
       setError(err instanceof Error ? err.message : "Cập nhật thất bại")
     } finally {
       setSubmitting(false)
     }
+  }
+
+  const setSkillScore = (key: SkillRadarAxisKey, score: number) => {
+    setSkillScores((current) => ({
+      ...current,
+      [key]: Math.min(10, Math.max(1, score)),
+    }))
   }
 
   return (
@@ -153,63 +163,52 @@ export function EditProfileSheet({ open, onOpenChange }: EditProfileSheetProps) 
             />
           </div>
 
-          <div className="space-y-1.5">
-            <div className="flex items-center justify-between">
-              <Label className="text-xs">Trình độ tự đánh giá</Label>
-              {(user.declared_rank ?? user.rank) && (
+          <div className="space-y-3">
+            <div className="space-y-1.5">
+              <div className="flex items-center justify-between">
+                <Label className="text-xs">Trình độ tự đánh giá</Label>
                 <span className="text-[11px] text-muted-foreground">
-                  Hiện tại: {(user.declared_rank ?? user.rank)!.display_name}
+                  Sao tự tính: {formatStars(computedStars)}/5
                 </span>
-              )}
-            </div>
-            <div className="grid grid-cols-2 gap-2">
-              {TIER_ORDER.map((t) => {
-                const active = tier === t
-                return (
-                  <button
-                    key={t}
-                    type="button"
-                    onClick={() => setTier(t)}
-                    className={
-                      "py-2 rounded-xl text-xs font-medium border transition-colors text-left px-3 " +
-                      (active
-                        ? "bg-primary/15 text-primary border-primary/50"
-                        : "bg-secondary/50 text-foreground border-border hover:bg-secondary")
-                    }
-                  >
-                    {SKILL_LABELS[t as SkillLevel] || t}
-                  </button>
-                )
-              })}
-            </div>
-            <p className="text-[11px] text-muted-foreground">
-              Hệ thống sẽ tự điều chỉnh điểm rating theo trận đấu bạn tham gia.
-            </p>
-          </div>
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                {TIER_ORDER.map((t) => {
+                  const active = tier === t
 
-          <div className="space-y-1.5">
-            <Label className="text-xs">Tự đánh giá (sao)</Label>
-            <div className="flex gap-1">
-              {[1, 2, 3, 4, 5].map((s) => (
-                <button
-                  key={s}
-                  type="button"
-                  onClick={() => setStars(s)}
-                  className="p-1 transition-colors"
-                >
-                  <Star
-                    className={`w-6 h-6 ${
-                      s <= stars
-                        ? "fill-amber-400 text-amber-400"
-                        : "text-muted-foreground/30"
-                    }`}
-                  />
-                </button>
-              ))}
+                  return (
+                    <button
+                      key={t}
+                      type="button"
+                      onClick={() => setTier(t)}
+                      className={
+                        "py-2 rounded-xl text-xs font-medium border transition-colors text-left px-3 " +
+                        (active
+                          ? "bg-primary/15 text-primary border-primary/50"
+                          : "bg-secondary/50 text-foreground border-border hover:bg-secondary")
+                      }
+                    >
+                      {SKILL_LABELS[t as SkillLevel] || t}
+                    </button>
+                  )
+                })}
+              </div>
             </div>
-            <p className="text-[11px] text-muted-foreground">
-              1 sao = mới lên, 5 sao = sắp lên tier trên.
-            </p>
+
+            <div className="flex items-center justify-between gap-3">
+              <Label className="text-xs">Tự đánh giá kỹ năng</Label>
+              <div className="text-right text-[11px] text-muted-foreground">
+                <div>Trung bình: {overallScore.toFixed(1)}/10</div>
+                <div>Số sao: {formatStars(computedStars)}/5</div>
+              </div>
+            </div>
+            <StarRating value={computedStars} sizeClassName="h-4 w-4" showValue />
+            <div className="rounded-2xl border border-border/50 bg-secondary/20 px-2 py-3">
+              <InteractiveSkillRadar
+                scores={skillScores}
+                onChange={setSkillScore}
+                disabled={submitting}
+              />
+            </div>
           </div>
 
           {error && (

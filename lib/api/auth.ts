@@ -1,5 +1,5 @@
 import { request } from "./client"
-import type { AuthResponse, AuthUser, Gender, RecentActivityResponse, UpdateProfileParams } from "./types"
+import type { AuthResponse, AuthUser, Gender, RecentActivityResponse, UpdateProfileParams, UpdateSkillProfileParams } from "./types"
 
 export type { ExperimentsPayload, GameDetailScreenVariant } from "./types"
 
@@ -61,6 +61,13 @@ export function fetchMyActivity(offset = 0, limit = 20) {
 
 export function updateProfile(params: UpdateProfileParams) {
   return request<AuthResponse>("/api/v1/me", {
+    method: "PATCH",
+    body: JSON.stringify(params),
+  })
+}
+
+export function updateSkillProfile(params: UpdateSkillProfileParams) {
+  return request<AuthResponse>("/api/v1/me/skills", {
     method: "PATCH",
     body: JSON.stringify(params),
   })

@@ -9,6 +9,7 @@ import { ProfileHeader } from "./profile/profile-header"
 import { ProfileEmailVerification } from "./profile/profile-email-verification"
 import { ProfilePersonalInfoCard } from "./profile/profile-personal-info-card"
 import { ProfileGuestUpgrade } from "./profile/profile-guest-upgrade"
+import { ProfileSkillRadarCard } from "./profile/profile-skill-radar-card"
 import { ProfileSkillStatsCard } from "./profile/profile-skill-stats-card"
 import { ProfileWinLossCard } from "./profile/profile-win-loss-card"
 import { ProfileQuickStatsCard } from "./profile/profile-quick-stats-card"
@@ -77,6 +78,13 @@ export function ProfileScreen() {
         <ProfilePersonalInfoCard
           user={user}
           declaredRank={declaredRank}
+          onEdit={() => setEditOpen(true)}
+        />
+
+        <ProfileSkillRadarCard
+          skillRadar={user.profile?.skill_radar}
+          skillHistory={user.profile?.skill_history}
+          fallbackTier={declaredRank?.tier}
           onEdit={() => setEditOpen(true)}
         />
 

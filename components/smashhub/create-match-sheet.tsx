@@ -16,6 +16,7 @@ import {
 import { SkillBadge } from "./skill-badge"
 import { GenderIcon } from "./gender-icon"
 import { sessionSkillStars, sessionSkillTier } from "@/lib/player-session-skill"
+import { formatStars } from "./star-rating"
 import { createMatch, updateMatch, type GamePlayer, type MatchSummary } from "@/lib/api"
 import {
   balanceTeams,
@@ -404,7 +405,7 @@ export function CreateMatchSheet({
                           if (stars == null) return null
                           return (
                             <span className="flex items-center gap-0.5 text-[10px] text-amber-400">
-                              {stars}<Star className="w-2.5 h-2.5 fill-amber-400 text-amber-400" />
+                              {formatStars(stars)}<Star className="w-2.5 h-2.5 fill-amber-400 text-amber-400" />
                             </span>
                           )
                         })()}
@@ -482,7 +483,7 @@ function TeamColumn({
                   if (stars == null) return null
                   return (
                     <span className="flex items-center gap-0.5 text-[9px] text-amber-400">
-                      {stars}<Star className="w-2 h-2 fill-amber-400 text-amber-400" />
+                      {formatStars(stars)}<Star className="w-2 h-2 fill-amber-400 text-amber-400" />
                     </span>
                   )
                 })()}

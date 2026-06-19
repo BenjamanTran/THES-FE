@@ -1,9 +1,10 @@
 "use client"
 
-import { Trophy, Target, TrendingUp, Star } from "lucide-react"
+import { Trophy, Target, TrendingUp } from "lucide-react"
 import { Card } from "@/components/ui/card"
 import { SkillBadge } from "../skill-badge"
 import { ratingToStars } from "@/lib/rating-stars"
+import { StarRating } from "../star-rating"
 
 interface ProfileSkillStatsCardProps {
   declaredRank: import("@/lib/api").AuthUser["declared_rank"]
@@ -26,18 +27,11 @@ export function ProfileSkillStatsCard({declaredRank, apiStats, matchStats}: Prof
                       <SkillBadge level={declaredRank.tier} size="sm" />
                     </div>
                     <p className="text-xl font-bold break-words leading-snug">{declaredRank.display_name}</p>
-                    <div className="flex gap-0.5 mt-2">
-                      {[1, 2, 3, 4, 5].map((s) => (
-                        <Star
-                          key={s}
-                          className={`w-4 h-4 ${
-                            s <= ratingToStars(declaredRank.tier, declaredRank.rating)
-                              ? "fill-amber-400 text-amber-400"
-                              : "text-muted-foreground/30"
-                          }`}
-                        />
-                      ))}
-                    </div>
+                    <StarRating
+                      value={ratingToStars(declaredRank.tier, declaredRank.rating)}
+                      sizeClassName="h-4 w-4"
+                      className="mt-2"
+                    />
                   </>
                 ) : (
                   <p className="text-sm text-muted-foreground">Chưa khai báo trình độ</p>
